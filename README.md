@@ -31,3 +31,4 @@ I am creating a software system for a travel agency (it will be part of my under
 - implement user support in the form of a chat with the administrator (SignalR)
 - add a system for sending emails from the site mail to confirm user actions and regular order-related notifications
 - implement a system for regular notifications to users (using the previous paragraph) as well as for regular updates of exchange rates and tour data (using Quartz.NET or Hangfire)
+- implement a multicultural interface

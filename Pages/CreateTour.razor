@@ -1,0 +1,524 @@
+﻿@page "/create-tour";
+@using Travel_App_Web.Models;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+<title>Create Tour</title>
+
+<h3>Create New Tour</h3>
+
+<EditForm EditContext=editContext OnValidSubmit="@Create">
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body">
+            <div class="mb-3 col-md-8 col-sm-6">
+                <label for="title" class="form-label">Title*:</label>
+                <InputText id="title" @bind-Value="tour.Title" class="form-control" />
+                <ValidationMessage For="@(() => tour.Title)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="description" class="form-label">Description*:</label>
+                <textarea id="description" @bind="tour.Description" class="form-control"></textarea>
+                <ValidationMessage For="@(() => tour.Description)" />
+            </div>
+
+            <div class="mb-3 col-md-2">
+                <label for="startDate" class="form-label">Start Date*:</label>
+                <InputDate id="startDate" @bind-Value="tour.StartDate" @onblur="OnDatesChange" class="form-control" min="@DateTime.Today.AddDays(14).ToString("yyyy-MM-dd")" />
+                <ValidationMessage For="@(() => tour.StartDate)" />
+            </div>
+
+            <div class="mb-3 col-md-2">
+                <label for="endDate" class="form-label">End Date*:</label>
+                <InputDate id="endDate" @bind-Value="tour.EndDate" @onblur="OnDatesChange" class="form-control" min="@DateTime.Today.AddDays(17).ToString("yyyy-MM-dd")" />
+                <ValidationMessage For="@(() => tour.EndDate)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="photo" class="form-label">Tour Photo:</label>
+                <InputFile id="photo" OnChange="HandleFileSelected" multiple="false" accept="image/jpeg, image/png, image/webp" />
+                <button type="button" class="btn btn-secondary" @onclick="ClearFile">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body">
+            <div class="mb-3 col-md-4">
+                <label for="cities" class="form-label">Cities*:</label>
+                <div>
+                    <ul class="list-group mt-2" style="display: flex; flex-direction: column; align-items: stretch;">
+                        @foreach (var city in tour.Cities)
+                        {
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                                @if (city.Country != null)
+                                {
+                                    <li class="list-group-item col-md-4" style="flex-grow: 1;">@city.Name - @city.Country</li>
+                                }
+                                else
+                                {
+                                    <li class="list-group-item col-md-4" style="flex-grow: 1;">@city.Name</li>
+                                }
+                                <button type="button" class="btn btn-secondary col-md-1" style="margin-left: 5px;" @onclick="() => RemoveElement<City>(tour.Cities, city)">X</button>
+                            </div>
+                        }
+                    </ul>
+                    <input id="cities" @bind="selectedCity" @oninput="SearchCities" class="form-control" list="cityList" style="margin-top: 5px;" />
+                    <datalist id="cityList">
+                        @foreach (var city in filteredCities)
+                        {
+                            <option value="@city.Name"></option>
+                        }
+                    </datalist>
+                    <button type="button" class="btn btn-primary mt-2" style="margin-top: 5px;" @onclick="AddCity">Add City</button>                    
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body">
+            <label class="form-label"> Prices (Based on apartments):</label>
+
+            @if (tour.Prices.Count != 0)
+            {
+                <table class="table row">
+                    <thead class="mb-3">
+                        <tr class="col-md-5">
+                            <th class="col-md-3" scope="col">Apartment Type</th>
+                            <th class="col-md-2" scope="col">Price</th>
+                            <th class="col-md-1" scope="col"></th>
+                        </tr>
+                    </thead>
+                    <tbody class ="mb-3">
+                        @foreach (var price in tour.Prices)
+                        {
+                            <tr class="col-md-4">
+                                <td class="col-md-2">@price.ApartmentType</td>
+                                <td class="col-md-2">@price.PriceEUR.ToString("0.00") EUR</td>                                
+                                <td class="col-md-1">
+                                    <button type="button" class="btn btn-secondary" style="margin-left: 5px;" @onclick="() => RemoveElement<Apartment>(tour.Prices, price)">X</button>
+                                </td>
+                            </tr>                            
+                        }
+                    </tbody>
+                </table>
+            }
+       
+            <div class="mb-3 row">
+
+                <div class="col-md-3">
+                    <label for="priceDescription" class="form-label">Description:</label>
+                    <InputText id="priceDescription" @bind-Value="priceDescription" class="form-control" />
+                </div>
+                <div class="col-md-2">
+                    <label for="priceAmount" class="form-label">Amount (EUR):</label>
+                    <InputNumber id="priceAmount" @bind-Value="priceAmount" class="form-control" />
+                </div>
+                <div class="col-md-2 col-lg-1">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="button" class="btn btn-primary form-control" @onclick="AddPrice">Add Price</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body row">
+            <div class="mb-3 col-md-3">
+                <label for="includedOptions" class="form-label">Included Options:</label>
+                <div>
+                    <ul class="list-group mt-2">
+                        @foreach (var inOption in tour.Included)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                @inOption.Content
+                                <button type="button" class="btn btn-secondary" @onclick="() => RemoveElement<Option>(tour.Included, inOption)">X</button>
+                            </li>
+                        }
+                    </ul>
+
+                    <input id="includedOptions" @bind="selectedIncludedOption" class="form-control" list="includedOptionsList" style="margin-top: 5px;" />
+                    <button type="button" class="btn btn-primary mt-2" style="margin-top: 5px;" @onclick="AddIncludedOption">Add Option</button>
+                </div>
+            </div>
+
+            <div class="mb-3 col-md-3">
+                <label for="notIncludedOptions" class="form-label">Not Included Options:</label>
+                <div>
+                    <ul class="list-group mt-2">
+                        @foreach (var noOption in tour.NotIncluded)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                @noOption.Content
+                                <button type="button" class="btn btn-secondary" @onclick="() => RemoveElement<Option>(tour.NotIncluded, noOption)">X</button>
+                            </li>
+                        }
+                    </ul>
+                    <input id="notIncludedOptions" @bind="selectedNotIncludedOption" class="form-control" list="notIncludedOptionsList" style="margin-top: 5px;" />
+                    
+                    <button type="button" class="btn btn-primary mt-2" style="margin-top: 5px;" @onclick="AddNotIncludedOption">Add Option</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body row">
+            <label class="form-label"> Program (Enter dates of start and end):</label>
+
+            @foreach (var day in tour.Days)
+            {
+                <div class="col-md-6" style="border-top: 2px solid #ccc; margin-top: 10px; padding-top: 10px;">
+                    <label class="form-label">Day @day.Number</label>
+
+                    <div class="mb-3 col-md-6">
+                        <label class="form-label">Title*:</label>
+                        <InputText @bind-Value="day.Title" class="form-control" />
+                        <ValidationMessage For="@(() => day.Title)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Description*:</label>
+                        <textarea @bind="day.Description" class="form-control"></textarea>
+                        <ValidationMessage For="@(() => day.Description)" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="photo" class="form-label">Day Photos:</label>
+                        <InputFile id="photo" OnChange="(e) => HandleFilesSelected(ref daysImages, day.Number - 1, e)" multiple="true" accept="image/jpeg, image/png, image/webp" />
+                        <button type="button" class="btn btn-secondary" @onclick="() => ClearFiles(ref daysImages, day.Number - 1)">Clear</button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body row">
+            <label class="form-label"> Hotel:</label>
+
+            <div class="mb-3">
+                <label class="form-label">Description*:</label>
+                <textarea @bind="tour.Hotel.Description" class="form-control"></textarea>
+                <ValidationMessage For="@(() => tour.Hotel.Description)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="photo" class="form-label">Hotel Photos:</label>
+                <InputFile id="photo" OnChange="(e) => HandleFilesSelected(ref hotelImages, e)" multiple="true" accept="image/jpeg, image/png, image/webp" />
+                <button type="button" class="btn btn-secondary" @onclick="() => ClearFiles(ref hotelImages)">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin:5px 0 5px 0;">
+        <div class="card-body row">
+            <label class="form-label"> Bus:</label>
+
+            <div class="mb-3">
+                <label class="form-label">Description*:</label>
+                <textarea @bind="tour.Bus.Description" class="form-control"></textarea>
+                <ValidationMessage For="@(() => tour.Bus.Description)" />
+            </div>
+
+            <div class="mb-3">
+                <label for="photo" class="form-label">Bus Photos:</label>
+                <InputFile id="photo" OnChange="(e) => HandleFilesSelected(ref busImages, e)" multiple="true" accept="image/jpeg, image/png, image/webp" />
+                <button type="button" class="btn btn-secondary" @onclick="() => ClearFiles(ref busImages)">Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <label>@responseMessage</label>
+
+    <button type="submit" class="btn btn-primary" style="margin-top: 10px">Create Tour</button>
+</EditForm>
+
+@code {
+    private Tour tour;
+    EditContext editContext = null!;
+    private string responseMessage = string.Empty;
+
+    IBrowserFile tourImage = null!;
+
+    List<City>? cities;
+    private string selectedCity = string.Empty;
+    private List<City> filteredCities = new();
+    private List<City> selectedCities = new();
+
+    private string priceDescription = string.Empty;
+    private decimal priceAmount;
+
+    private string selectedIncludedOption = string.Empty;
+    private string selectedNotIncludedOption = string.Empty;
+
+    private List<IBrowserFile[]> daysImages = new();
+
+    private IBrowserFile[] hotelImages = new IBrowserFile[0];
+    private IBrowserFile[] busImages = new IBrowserFile[0];
+
+
+    private void OnDatesChange()
+    {
+        if (tour.StartDate < DateTime.Now || tour.EndDate < DateTime.Now) return;
+
+        if ((tour.EndDate - tour.StartDate).Days + 1 > tour.Days.Count)
+        {
+            while ((tour.EndDate - tour.StartDate).Days + 1 > tour.Days.Count)
+            {
+                daysImages.Add(new IBrowserFile[0]);
+
+                tour.Days.Add(new()
+                {
+                    Number = tour.Days.Count + 1,
+                    Title = "Title",
+                    Description = "Description",
+                    Images = new()
+                }
+                );
+            }
+        }
+        else if ((tour.EndDate - tour.StartDate).Days + 1 < tour.Days.Count)
+        {
+            while ((tour.EndDate - tour.StartDate).Days + 1 < tour.Days.Count)
+            {
+                daysImages.RemoveAt(tour.Days.Count - 1);
+
+                tour.Days.RemoveAt(tour.Days.Count - 1);
+            }
+        }
+        else
+            return;
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e) => tourImage = e.File;
+    private void ClearFile() => tourImage = null!;
+
+    private void SearchCities()
+    {
+        filteredCities = cities.Where(city => city.Name.Contains(selectedCity, StringComparison.OrdinalIgnoreCase)).
+        OrderBy(city => city.Name).ToList();
+    }
+    private void AddCity()
+    {
+        if (!string.IsNullOrWhiteSpace(selectedCity) /*&& cities.All(city => !city.Name.Equals(selectedCity, StringComparison.OrdinalIgnoreCase))*/)
+        {
+            City? city = cities.Find(city => city.Name == selectedCity);
+            if (city == null)
+            {
+                city = new() { Name = selectedCity };
+                cities.Add(city);
+            }
+
+            if (tour.Cities == null) tour.Cities = new();
+            tour.Cities.Add(city);
+
+            selectedCity = string.Empty;
+            filteredCities.Clear();
+        }
+    }
+
+    private void AddPrice()
+    {
+        if (priceDescription == string.Empty || priceAmount == 0) return;
+
+        tour.Prices.Add(new() { ApartmentType = priceDescription, PriceEUR = priceAmount });
+        priceDescription = string.Empty;
+        priceAmount = new();
+    }
+
+    private void AddIncludedOption()
+    {
+        if (selectedIncludedOption == string.Empty) return;
+
+        tour.Included.Add(new() { Content = selectedIncludedOption });
+        selectedIncludedOption = string.Empty;
+    }
+    private void AddNotIncludedOption()
+    {
+        if (selectedNotIncludedOption == string.Empty) return;
+
+        tour.NotIncluded.Add(new() { Content = selectedNotIncludedOption });
+        selectedNotIncludedOption = string.Empty;
+    }
+
+    private void RemoveElement<T>(List<T> List, T obj) => List.Remove(obj);
+
+    private void ClearFiles(ref IBrowserFile[] browserFiles) => browserFiles = null;
+    private void HandleFilesSelected(ref IBrowserFile[] browserFiles, InputFileChangeEventArgs e)
+    {
+        browserFiles = e.GetMultipleFiles().ToArray<IBrowserFile>();
+    }
+
+    private void ClearFiles(ref List<IBrowserFile[]> browserFiles, int index) => browserFiles[index] = null;
+    private void HandleFilesSelected(ref List<IBrowserFile[]> browserFiles, int index, InputFileChangeEventArgs e)
+    {
+        browserFiles[index] = e.GetMultipleFiles().ToArray<IBrowserFile>();
+    }
+
+
+    private async Task Create()
+    {
+        responseMessage = string.Empty;
+
+        bool isFormValid = editContext.Validate();
+        if (!isFormValid)
+        {
+            responseMessage = "Form is not valid";
+            return;
+        }
+        if (tourImage == null)
+        {
+            responseMessage += "\nAttach tour image";
+            return;
+        }
+        foreach (var fileArray in daysImages)
+        {
+            if (fileArray is null)
+            {
+                responseMessage += "\nInput Dates!";
+                return;
+            }
+            if (fileArray.Length == 0)
+            {
+                responseMessage += "\nAttach images to day!";
+                return;
+            }
+        }
+        if (hotelImages.Length == 0)
+        {
+            responseMessage += "\nAttach hotel images";
+            return;
+        }
+        if (busImages.Length == 0)
+        {
+            responseMessage += "\nAttach bus images";
+            return;
+        }
+
+
+        MultipartFormDataContent formData = new();
+        formData.Add(new StreamContent(tourImage.OpenReadStream()), "file", tourImage.Name);
+
+        var response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-tour-image", formData);
+
+        if (response.IsSuccessStatusCode)
+        {
+            tour.ImagePath = await response.Content.ReadAsStringAsync();
+
+            tourImage = null;
+        }
+        else
+        {
+            responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
+            return;
+        }
+
+        foreach (var day in tour.Days)
+        {
+            if (daysImages[day.Number - 1].Length == 0) continue;
+
+            formData = new MultipartFormDataContent();
+
+            foreach (var file in daysImages[day.Number - 1])
+            {
+                formData.Add(new StreamContent(file.OpenReadStream()), "files", file.Name);
+            }
+
+            response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-days-images", formData);
+
+            if (response.IsSuccessStatusCode)
+            {
+                if (day.Images == null) day.Images = new();
+
+                List<string>? pathes = await response.Content.ReadFromJsonAsync<List<string>>();
+
+                foreach (var path in pathes)
+                {
+                    day.Images.Add(new() { Path = path });
+                }
+            }
+            else
+            {
+                responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
+                return;
+            }
+        }
+
+        formData = new MultipartFormDataContent();
+
+        foreach (var file in hotelImages)
+        {
+            formData.Add(new StreamContent(file.OpenReadStream()), "files", file.Name);
+        }
+
+        response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-hotel-images", formData);
+
+        if (response.IsSuccessStatusCode)
+        {
+            if (tour.Hotel.Images == null) tour.Hotel.Images = new();
+
+            List<string>? pathes = await response.Content.ReadFromJsonAsync<List<string>>();
+
+            foreach (var path in pathes)
+            {
+                tour.Hotel.Images.Add(new() { Path = path });
+            }
+        }
+        else
+        {
+            responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
+            return;
+        }
+
+        formData = new MultipartFormDataContent();
+
+        foreach (var file in busImages)
+        {
+            formData.Add(new StreamContent(file.OpenReadStream()), "files", file.Name);
+        }
+
+        response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-bus-images", formData);
+
+        if (response.IsSuccessStatusCode)
+        {
+            if (tour.Bus.Images == null) tour.Bus.Images = new();
+
+            List<string>? pathes = await response.Content.ReadFromJsonAsync<List<string>>();
+
+            foreach (var path in pathes)
+            {
+                tour.Bus.Images.Add(new() { Path = path });
+            }
+        }
+        else
+        {
+            responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
+            return;
+        }
+
+
+        var tourResponse = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "tour/create-tour", tour);
+
+        responseMessage += $"\n{await tourResponse.Content.ReadAsStringAsync()}";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        tour = new();
+        tour.Users = new();
+        tour.Cities = new();
+        tour.Prices = new();
+        tour.Included = new();
+        tour.NotIncluded = new();
+        tour.Days = new();
+        tour.Hotel = new();
+        tour.Bus = new();
+
+        editContext = new(tour); 
+
+        cities = await HttpClient.GetFromJsonAsync<List<City>>(NavigationManager.BaseUri + "city/cities");
+        cities.OrderBy(city => city.Name).ToList();
+    }
+}

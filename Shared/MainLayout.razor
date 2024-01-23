@@ -1,0 +1,39 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>Travel_App_Web</PageTitle>
+
+<div class="container-fluid d-flex flex-column min-vh-100">
+    <NavMenu />
+
+    <div class="row flex-grow-1" style="margin-bottom: 20px;">
+        <div class="col-12">
+            <main class="px-4">
+                <article class="content">
+                    @Body
+                </article>
+            </main>
+        </div>
+    </div>
+
+    <footer class="mt-auto py-3" style="background-color: #5E86AF; color: white; border-radius: 10px 10px 10px 10px;">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-4">
+                    <h5>Contact Information</h5>
+                    <p>Address: Your Address</p>
+                    <p>Phone: Your Phone</p>
+                    <p>Email: Your Email</p>
+                </div>
+                <div class="col-4">
+                    <h5>Working Hours</h5>
+                    <p>Monday-Friday: 9 AM - 5 PM</p>
+                    <p>Saturday: 10 AM - 2 PM</p>
+                    <p>Sunday: Closed</p>
+                </div>
+                <div class="col-4">
+                    <!-- Additional information or links -->
+                </div>
+            </div>
+        </div>
+    </footer>
+</div>

@@ -1,0 +1,112 @@
+﻿@using Travel_App_Web.Pages;
+@using System.Security.Claims;
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject HttpClient HttpClient
+
+<CascadingAuthenticationState>
+<div class="navbar navbar-expand-lg navbar-dark" style="background-color: #5E86AF; border-radius: 10px 10px 10px 10px;">
+    <div class="container">
+        <a class="navbar-brand" href="#">Wonderlust Explorers</a>
+        <button class="navbar-toggler" type="button" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse justify-content-between" id="navbarNav">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" href="">
+                        Tours
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="create-tour">
+                        Add Tour
+                    </a>
+                </li>
+            </ul>
+            <div class="text-end">
+                @if (IsAuth)
+                {
+                    <h5>Hi @responceMessage</h5>
+                }
+                else{
+                    <a href="" class="nav-link text-white" @onclick="ShowLogin">Log in</a>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+</CascadingAuthenticationState>
+
+@if (showLogin)
+{
+    <div class="overlay">
+        <div class="logreg-container">
+            <LoginComponent OnSuccess="CheckAuth" OnExit="HideLogin" OnRegistration="() => { HideLogin(); ShowRegistartion(); }"/>
+            @*<button class="btn btn-secondary mt-2" @onclick="HideLogin">Close</button>*@
+        </div>
+    </div>
+}
+
+@if (showRegistration)
+{
+    <div class="overlay">
+        <div class="logreg-container">
+            <RegisterComponent OnSuccess="CheckAuth" OnExit="HideRegistartion" />
+            <button class="btn btn-secondary mt-2" @onclick="HideRegistartion">Cancel</button>
+        </div>
+    </div>
+}
+
+@code {
+    private bool IsAuth = false;
+    private bool collapseNavMenu = true;
+    private string responceMessage = string.Empty;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+
+    private bool showLogin = false;
+
+    private void ShowLogin()
+    {
+        showLogin = true;
+    }
+
+    private void HideLogin()
+    {
+        showLogin = false;
+    }
+
+    private bool showRegistration = false;
+
+    private void ShowRegistartion()
+    {
+        showRegistration = true;
+    }
+
+    private void HideRegistartion()
+    {
+        showRegistration = false;
+    }
+
+    private async Task CheckAuth()
+    {
+        var responce = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/current-user");
+
+        if (responce.IsSuccessStatusCode)
+        {
+            IsAuth = true;
+
+            responceMessage = await responce.Content.ReadAsStringAsync();
+            StateHasChanged();
+        }
+        else
+            IsAuth = false;
+    }
+}

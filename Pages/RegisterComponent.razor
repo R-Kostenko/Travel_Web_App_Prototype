@@ -1,0 +1,141 @@
+﻿@page "/register";
+@using Travel_App_Web.Models;
+@using System.Net
+@using System.Net.Http.Json
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Registration</PageTitle>
+
+<EditForm EditContext=editContext OnValidSubmit=RegisterAsync>
+    <div class="card">
+        <div class="card-body">
+            <h4 class="card-title" style="max-width: 300px;">Registration</h4>
+
+            <div class="mb-3">
+                <label for="inputFirstName" class="form-label">First Name*</label>
+                <div>
+                    <InputText @bind-Value="model.FirstName" @oninput="CheckValidation" class="form-control" id="inputFirstName" />
+                    <ValidationMessage For="() => model.FirstName" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputMiddleName" class="form-label">Middle Name</label>
+                <div>
+                    <InputText @bind-Value="model.MiddleName" @oninput="CheckValidation" class="form-control" id="inputMiddleName" />
+                    <ValidationMessage For="() => model.MiddleName" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputLastName" class="form-label">Last Name*</label>
+                <div>
+                    <InputText @bind-Value="model.LastName" @oninput="CheckValidation" class="form-control" id="inputLastName" />
+                    <ValidationMessage For="() => model.LastName" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputEmail" class="form-label">Email*</label>
+                <div>
+                    <InputText @bind-Value="model.Email" @oninput="CheckValidation" class="form-control" id="inputEmail" />
+                    <ValidationMessage For="() => model.Email" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputPhone" class="form-label">Phone*</label>
+                <div>
+                    <InputText @bind-Value="model.Phone" @oninput="CheckValidation" class="form-control" id="inputPhone" />
+                    <ValidationMessage For="() => model.Phone" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputPassword" class="form-label">Password*</label>
+                <div>
+                    <InputText @bind-Value="model.Password" @oninput="CheckValidation" type="password" class="form-control" id="inputPassword" />
+                    <ValidationMessage For="() => model.Password" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputConfirmPassword" class="form-label">Confirm password*</label>
+                <div>
+                    <InputText @bind-Value="model.ConfirmPassword" @onblur="CheckValidation" type="password" class="form-control" id="inputConfirmPassword" />
+                    <ValidationMessage For="() => model.ConfirmPassword" class="text-danger" />
+                </div>
+            </div>
+
+            <p class="mt-3" style="max-width: 300px;">@responseMessage</p>
+
+            <button class="btn btn-warning" type="Submit" disabled="@(!isFormValid)">
+                Register
+            </button>
+
+            @*<button class="btn btn-secondary" @onclick="OnExit">
+                Cancel
+            </button>*@
+
+            <DataAnnotationsValidator />
+        </div>        
+    </div>
+</EditForm>
+
+
+@code {
+    RegisterModel model = null!;
+    private EditContext editContext = null!;
+    string responseMessage = string.Empty;
+    bool isFormValid;
+
+    async Task RegisterAsync()
+    {
+        responseMessage = string.Empty;
+        if (!editContext.Validate())
+        {
+            isFormValid = false;
+            return;
+        }
+
+        var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "account/reg", model);
+
+        if (response.IsSuccessStatusCode)
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+            StateHasChanged();
+            Thread.Sleep(2000);
+            Task task = OnSuccess.InvokeAsync();
+            //await task;
+            await OnExit.InvokeAsync();
+        }
+        else if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            responseMessage = "An error occurred!";
+        }
+
+        StateHasChanged();
+    }
+
+    private void CheckValidation()
+    {
+        isFormValid = editContext.Validate();
+        StateHasChanged();
+    }
+
+
+    protected override void OnInitialized()
+    {
+        model = new();
+        editContext = new(model);
+        isFormValid = false;
+    }
+
+    [Parameter] public EventCallback OnExit { get; set; }
+    [Parameter] public EventCallback OnSuccess { get; set; }
+}

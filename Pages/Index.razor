@@ -1,0 +1,55 @@
+﻿@page "/"
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@using System.Security.Claims;
+@using Microsoft.AspNetCore.Components.Authorization
+@using Travel_App_Web.Models;
+
+<PageTitle>Tours</PageTitle>
+
+<h1>Available tours!</h1>
+
+<div>
+    <div class="row">
+        @if (tours != null)
+        {
+            @foreach (var tour in tours)
+            {
+                <div class="col-md-4 mb-4">
+                    <div class="tour-card" @onclick="() => OnTourClick(tour.Id)">
+                        <img src="@tour.ImagePath" class="img-fluid rounded" alt="Tour Image" />
+                        <div class="tour-info">
+                            <div class="d-flex justify-content-between">
+                                <label class="tour-date">@tour.StartDate.ToShortDateString()</label>
+                                <h5 class="tour-title">@tour.Title</h5>
+                                <p class="tour-price">@Convert.ToDouble(tour.Prices.Average(price => price.PriceEUR * 41.61M)) грн</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+</div>
+
+@code{
+    private List<Tour>? tours = new();
+    private string responseMessage = string.Empty;
+
+    private void OnTourClick (int Id)
+    {
+        NavigationManager.NavigateTo($"/tour-view/{Id}");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await HttpClient.GetAsync(NavigationManager.BaseUri + "tour/tours-with-prices");
+
+        if (response.IsSuccessStatusCode)
+        {
+            tours = await response.Content.ReadFromJsonAsync<List<Tour>>();
+        }
+    }
+}

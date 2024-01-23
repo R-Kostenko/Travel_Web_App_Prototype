@@ -1,0 +1,123 @@
+﻿@page "/login";
+@using Travel_App_Web.Models;
+@using System.Net
+@using System.Net.Http.Json
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Log in</PageTitle>
+
+<EditForm EditContext=editContext OnValidSubmit=Login>
+    <div class="card">
+        <div class="card-body" style="max-width: 300px;">
+            <h4 class="card-title">Authorization</h4>
+
+            <div class="mb-3">
+                <label for="inputEmail" class="form-label">Email*</label>
+                <div>
+                    <InputText @onblur="CheckFields" @bind-Value="model.Email" class="form-control" id="inputEmail" />
+                    <ValidationMessage For="() => model.Email" class="text-danger" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="inputPassword" class="form-label">Password*</label>
+                <div>
+                    <InputText @onblur="CheckFields" @bind-Value="model.Password" type="password" class="form-control" id="inputPassword" />
+                    <ValidationMessage For="() => model.Password" class="text-danger" />
+                </div>
+            </div>
+
+            <button class="btn btn-warning" type="Submit" disabled="@(!isFormValid)">
+                Log in
+            </button>
+
+            <button class="btn btn-secondary" @onclick="OnExit">
+                Cancel
+            </button>
+
+            @if (attemptsCount > 1)
+            {
+                <div class="mt-2">
+                    <label class="text-danger">You have @attemptsCount attempts!</label>
+                </div>
+            }
+            else if (attemptsCount == 1)
+            {
+                <div class="mt-2">
+                    <label class="text-danger">You have 1 attempt!</label>
+                </div>
+            }
+            else
+            {
+                <div class="mt-2">
+                    <label class="text-success">You have no attempts!</label>
+                </div>
+            }
+            <p class="mt-3" style="max-width: 300px;">@responseMessage</p>
+
+            <DataAnnotationsValidator />
+        </div>
+
+        <div class="mt-3 card-body">
+            <p class="text-muted">Don't have an account? <a href="/" @onclick="OnRegistration">Register here</a>.</p>
+        </div>
+    </div>
+</EditForm>
+
+
+
+@code {
+    LoginModel model;
+    private EditContext editContext = null!;
+    string responseMessage;
+    bool isFormValid;
+    int attemptsCount = 3;
+
+
+    protected override void OnInitialized()
+    {
+        model = new();
+        editContext = new(model);
+        isFormValid = false;
+    }
+
+    async Task Login()
+    {
+        responseMessage = string.Empty;
+
+        var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "account/auth", model);
+
+        if (response.IsSuccessStatusCode)
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+            StateHasChanged();
+            Thread.Sleep(2000);
+            Task onSuccess = OnSuccess.InvokeAsync();
+            //await onSuccess;
+            await OnExit.InvokeAsync();
+        }
+        else if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            attemptsCount--;
+            responseMessage = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+        }
+
+        if (attemptsCount < 1) isFormValid = false;
+
+        StateHasChanged();
+    }
+
+    void CheckFields()
+    {
+        isFormValid = editContext.Validate() && attemptsCount > 0;
+    }
+
+    [Parameter] public EventCallback OnExit { get; set; }
+    [Parameter] public EventCallback OnRegistration { get; set; }
+    [Parameter] public EventCallback OnSuccess { get; set; }
+}

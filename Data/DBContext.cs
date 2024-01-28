@@ -11,6 +11,7 @@ namespace Travel_App_Web.Data
         public DbSet<Role> Roles { get; set; }
         public DbSet<Tour> Tours { get; set; }
         public DbSet<City> Cities { get; set; }
+        public DbSet<Chat> Chats { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {            

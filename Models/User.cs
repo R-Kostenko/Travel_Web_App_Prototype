@@ -31,11 +31,11 @@ namespace Travel_App_Web.Models
         [Required, MinLength(8)]
         public string PasswordHash { get; set; } = null!;
 
-        [ForeignKey("RoleId")]
-        public Role Role { get; set; } = new Role();
+        public Role Role { get; set; } = null!;
 
         public List<Tour>? Tours { get; set; }
 
+        public List<Chat> Chats { get; set; } = new List<Chat>();
 
         public void SetPassword(string password)
         {
@@ -57,6 +57,24 @@ namespace Travel_App_Web.Models
             {
                 byte[] newHash = deriveBytes.GetBytes(32);
                 return newHash.SequenceEqual(hash);
+            }
+        }
+    }
+
+    public static class ChatListExtensions
+    {
+        public static void AddChat(this List<Chat> chats, Chat chat, Role userRole)
+        {
+            if (userRole.RoleName == "Admin")
+            {
+                chats.Add(chat);
+            }
+            else
+            {
+                if (chats.Count < 1)
+                {
+                    chats.Add(chat);
+                }
             }
         }
     }

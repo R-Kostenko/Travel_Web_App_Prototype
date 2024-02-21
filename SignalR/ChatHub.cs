@@ -1,11 +1,12 @@
-﻿using Humanizer;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using Travel_App_Web.Data;
 using Travel_App_Web.Models;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Travel_App_Web.SignalR
 {
@@ -15,7 +16,39 @@ namespace Travel_App_Web.SignalR
         private readonly DBContext _dbContext;
         private static readonly ConcurrentDictionary<string, string> _usersOnline = new();
         private static readonly ConcurrentQueue<(User, string, string)> _serviceQueue = new();
-        private readonly List<Chat> _activeChats = new();
+        private static readonly ActiveChatList _activeChats = new();
+        private sealed class ActiveChatList
+        {
+            private readonly List<Chat> _activeChats = new List<Chat>();
+            private readonly object _lock = new object();
+
+            public void AddChat(Chat chat)
+            {
+                lock (_lock)
+                {
+                    _activeChats.Add(chat);
+                }
+            }
+
+            public void RemoveChatById(int Id)
+            {
+                lock (_lock)
+                {
+                    _activeChats.RemoveAll(c => c.Id == Id);
+                }
+            }
+
+            public bool ContainsChatById(int id)
+            {
+                return _activeChats.Exists(c => c.Id == id);
+            }
+
+            public Chat? Find(Predicate<Chat> match)
+            {
+                return _activeChats.Find(match);
+
+            }
+        }
 
         public ChatHub(DBContext dbContext) : base()
         {
@@ -25,39 +58,47 @@ namespace Travel_App_Web.SignalR
 
         public override async Task OnConnectedAsync()
         {
-            string? userEmail = Context.User?.Identity?.Name;
-            string? role = Context.User?.FindFirst(ClaimTypes.Role)?.Value;
-
-            if (!string.IsNullOrEmpty(userEmail) && !string.IsNullOrEmpty(role))
+            try
             {
-                _usersOnline.TryAdd(userEmail, role);
-            }
+                string? userEmail = Context.User?.Identity?.Name;
+                string? role = Context.User?.FindFirst(ClaimTypes.Role)?.Value;
 
-            if (role == "Admin" && _serviceQueue.Count > 0)
-            {
-                await ProcessAdminServiceAsync(userEmail);
-            }
-
-            if (_dbContext.Chats != null)
-            {
-                var userChats = _dbContext.Chats?
-                    .Include(chat => chat.Messages)
-                    .Where(chat => chat.InterlocutorsEmails.Any(einfo => einfo.Email == userEmail))
-                    .ToList();
-
-                if (userChats != null)
+                if (!string.IsNullOrEmpty(userEmail) && !string.IsNullOrEmpty(role))
                 {
-                    foreach (var chat in userChats)
+                    _usersOnline.TryAdd(userEmail, role);
+                }
+
+                while (role == "Admin" && !_serviceQueue.IsEmpty)
+                {
+                    await ProcessAdminServiceAsync(userEmail);
+                }
+
+                if (_dbContext.Chats != null)
+                {
+                    var userChats = _dbContext.Chats?
+                        .Include(chat => chat.Messages)
+                        .Include(chat => chat.InterlocutorsEmails)
+                        .Where(chat => chat.InterlocutorsEmails.Any(einfo => einfo.Email == userEmail))
+                        .ToList();
+
+                    if (!userChats.IsNullOrEmpty())
                     {
-                        if (!_activeChats.Contains(chat))
+                        foreach (var chat in userChats)
                         {
-                            _activeChats.Add(chat);
+                            if (!_activeChats.ContainsChatById(chat.Id))
+                            {
+                                _activeChats.AddChat(chat);
+                            }
                         }
                     }
                 }
-            }
 
-            await base.OnConnectedAsync();
+                await base.OnConnectedAsync();
+            }
+            catch (Exception ex)
+            {
+                string mess = ex.Message;
+            }
         }
 
         private async Task ProcessAdminServiceAsync(string userEmail)
@@ -65,9 +106,10 @@ namespace Travel_App_Web.SignalR
             if (_dbContext.Users != null)
             {
                 var admin = await _dbContext.Users
-                .Include(a => a.Chats)
-                .ThenInclude(chat => chat.Messages)
-                .FirstOrDefaultAsync(a => a.Email == userEmail);
+                    .Include(user => user.Role)
+                    .Include(a => a.Chats)
+                    .ThenInclude(chat => chat.Messages)
+                    .FirstOrDefaultAsync(a => a.Email == userEmail);
 
                 if (_serviceQueue.TryDequeue(out var value))
                 {
@@ -75,26 +117,76 @@ namespace Travel_App_Web.SignalR
 
                     if (client != null && admin != null)
                     {
+                        EmailInfo? clientEmail = await _dbContext.Emails.FindAsync(client.Email);
+                        if (clientEmail is null)
+                        {
+                            clientEmail = new EmailInfo() { Email = client.Email };
+                            _dbContext.Emails.Add(clientEmail);
+                            _dbContext.SaveChanges();
+                        }
+
+                        EmailInfo? adminEmail = await _dbContext.Emails.FindAsync(admin.Email);
+                        if (adminEmail is null)
+                        {
+                            adminEmail = new EmailInfo() { Email = admin.Email };
+                            _dbContext.Emails.Add(adminEmail);
+                            _dbContext.SaveChanges();
+                        }
+
                         var chat = new Chat()
                         {
-                            InterlocutorsEmails = new() { 
-                                new EmailInfo() { Email = client.Email },
-                                new EmailInfo() { Email = admin.Email }
+                            InterlocutorsEmails = new() {
+                                clientEmail,
+                                adminEmail
                             },
                         };
-                        chat.Messages.Add(new Message()
+                        var messageObj = new Message()
                         {
                             SenderEmail = client.Email,
+                            SenderName = senderName,
                             Content = message
-                        });
+                        };
+                        chat.Messages.Add(messageObj);
 
                         _dbContext.Chats.Add(chat);
-                        admin.Chats.AddChat(chat, admin.Role);
-                        client.Chats.AddChat(chat, client.Role);
                         await _dbContext.SaveChangesAsync();
 
-                        _activeChats.Add(chat);
-                        await Clients.User(admin.Email).SendAsync("Receive", message, senderName);
+                        try
+                        {
+                            chat = await _dbContext.Chats
+                                .Include(c => c.Messages)
+                                .Include(c => c.InterlocutorsEmails)
+                                .FirstOrDefaultAsync(c => c.InterlocutorsEmails.Any(e => e.Email == admin.Email)
+                                    && c.InterlocutorsEmails.Any(e => e.Email == client.Email));
+
+                            if (chat != null)
+                            {
+                                using (IDbContextTransaction transaction = _dbContext.Database.BeginTransaction())
+                                {
+                                    try
+                                    {
+                                        admin.Chats.AddChat(chat, admin.Role);
+                                        client.Chats.AddChat(chat, client.Role);
+
+                                        await _dbContext.SaveChangesAsync();
+
+                                        transaction.Commit();
+                                    }
+                                    catch
+                                    {
+                                        transaction.Rollback();
+                                    }
+                                }
+
+                                _activeChats.AddChat(chat);
+                                await Clients.User(client.Email).SendAsync("ReceiveMessage", chat.Id, messageObj);
+                                await Clients.User(admin.Email).SendAsync("ReceiveMessage", chat.Id, messageObj);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            string mess = ex.Message;
+                        }
                     }
                 }
             }
@@ -102,87 +194,138 @@ namespace Travel_App_Web.SignalR
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            string role;
             var userEmail = Context.User?.Identity?.Name;
             if (!string.IsNullOrEmpty(userEmail))
             {
-                _usersOnline.TryRemove(userEmail, out role);
+                _usersOnline.TryRemove(userEmail, out var values);
             }
 
-            var userChats = _dbContext.Chats?
+            var userChats = await _dbContext.Chats?
+                .Include(chat => chat.InterlocutorsEmails)
                 .Include(chat => chat.Messages)
                 .Where(chat => chat.InterlocutorsEmails.Any(einfo => einfo.Email == userEmail))
-                .ToList();
+                .AsSplitQuery()
+                .ToListAsync();
 
-            if (userChats != null)
+            if (userChats != null && userEmail != null)
             {
-                await ProcessChatsToRemoveAsync(userChats, userEmail);
+                ProcessChatsToRemoveAsync(userChats, userEmail);
             }
 
             await base.OnDisconnectedAsync(exception);
         }
 
-        private Task ProcessChatsToRemoveAsync(List<Chat> userChats, string userEmail)
+        private void ProcessChatsToRemoveAsync(List<Chat> userChats, string userEmail)
         {
-            return Task.Run(() =>
-            {
-                var chatsToRemove = userChats
-                .Where(userChat => _activeChats.Contains(userChat) &&
+            var chatsIdToRemove = userChats
+                .Where(userChat => _activeChats.ContainsChatById(userChat.Id) &&
                     !userChat.InterlocutorsEmails.Where(einfo => einfo.Email != userEmail)
                         .Any(einfo => _usersOnline.ContainsKey(einfo.Email)))
+                .Select(chat => chat.Id)
                 .ToList();
 
-                foreach (var chatToRemove in chatsToRemove)
-                {
-                    _activeChats.Remove(chatToRemove);
-                }
-            });
+            foreach (var chatIdToRemove in chatsIdToRemove)
+            {
+                _activeChats.RemoveChatById(chatIdToRemove);
+            }
         }
 
-        public async Task Send(string senderName, string message, string receiver = "")
+        public async Task Send(string senderName, string message, int chatId)
         {
-            if (string.IsNullOrEmpty(receiver))
+            if (chatId <= 0)
             {
                 User? user = _dbContext.Users
+                    .Include(user => user.Role)
                     .Include(user => user.Chats)
                     .ThenInclude(chat => chat.Messages)
                     .FirstOrDefault(user => user.Email == Context.User.Identity.Name);
                 
                 if (user != null)
                 {
+                    foreach (var tuple in _serviceQueue)
+                    {
+                        if (tuple.Item1.Email == user.Email)
+                        {
+                            message = "You are already in the queue for service";
+                            await Clients.User(user.Email).SendAsync("ReceiveMessage", chatId, new Message()
+                            {
+                                Content = message,
+                                SenderEmail = string.Empty,
+                                SenderName = "System",
+                            });
+                            return;
+                        }
+                    }
                     _serviceQueue.Enqueue((user, senderName, message));
-                }
 
-                if (_usersOnline.Any(user => user.Value == "Admin"))
-                {
-                    var adminsId = _usersOnline.Where(user => user.Value == "Admin").Select(user => user.Key);
-                    var admin = await _dbContext.Users
-                        .Include(user => user.Chats)
-                        .ThenInclude(chat => chat.Messages)
-                        .Include(user => user.Role)
-                        .Where(user => adminsId.Contains(user.Email))
-                        .OrderBy(admin => admin.Chats.Count).FirstAsync();
+                    if (_usersOnline.Any(user => user.Value == "Admin"))
+                    {
+                        var adminsId = _usersOnline.Where(user => user.Value == "Admin").Select(user => user.Key).ToList();
+                        if (adminsId.Any())
+                        {
+                            var admin = await _dbContext.Users
+                                .Include(user => user.Chats)
+                                .ThenInclude(chat => chat.Messages)
+                                .Include(user => user.Role)
+                                .Where(user => adminsId.Contains(user.Email))
+                                .OrderBy(admin => admin.Chats.Count).FirstAsync();
 
-                    await ProcessAdminServiceAsync(admin.Email);
+                            await ProcessAdminServiceAsync(admin.Email);
+                        }
+                    }
+                    else
+                    {
+                        message = "Unfortunately, we don't have any online administrators at the moment. " +
+                            "Your message has been queued and will be processed when an administrator is connected.";
+                        await Clients.User(user.Email).SendAsync("ReceiveMessage", chatId, new Message()
+                        {
+                            Content = message,
+                            SenderEmail = string.Empty,
+                            SenderName = "System",
+                        });
+                    }
                 }
             }
             else
             {
-                var chat = _activeChats.Find(chat => chat.InterlocutorsEmails.Count == 2 &&
-                    chat.InterlocutorsEmails.Exists(einfo => einfo.Email == receiver) && 
-                    chat.InterlocutorsEmails.Exists(einfo => einfo.Email == Context.User.Identity.Name));
+                var chat = _activeChats.Find(chat => chat.Id == chatId);
 
                 if (chat != null)
                 {
-                    chat.Messages.Add(new Message()
+                    var messageObj = new Message()
                     {
                         SenderEmail = Context.User.Identity.Name,
+                        SenderName = senderName,
                         Content = message,
-                    });
+                    };
 
-                    await _dbContext.SaveChangesAsync();
-                    await Clients.User(receiver).SendAsync("Receive", message, senderName);
+                    try
+                    {
+                        _dbContext.Attach(chat);
+                        chat.Messages.Add(messageObj);
+
+                        await _dbContext.SaveChangesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        string mess = ex.Message;
+                    }
+                    foreach (var userEmail in chat.InterlocutorsEmails.Where(e => e.Email != messageObj.SenderEmail))
+                    {
+                        await Clients.User(userEmail.Email).SendAsync("ReceiveMessage", chat.Id, messageObj);
+                    }
                 }
+            }
+        }
+
+        public async Task ReadSet(string userEmail, int chatId)
+        {
+            var chat = _activeChats.Find(c => c.Id == chatId);
+            if (chat != null)
+            {
+                _dbContext.Attach(chat);
+                chat.Messages.Where(m => !m.IsRead && m.SenderEmail != userEmail).ToList().ForEach(m => m.IsRead = true);
+                await _dbContext.SaveChangesAsync();
             }
         }
     }

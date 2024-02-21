@@ -16,7 +16,7 @@ namespace Travel_App_Web.Models
 
     public class EmailInfo
     {
-        [Key]
+        [Key, MaxLength(254), Column(TypeName = "varchar")]
         public string Email { get; set; } = string.Empty;
     }
 
@@ -24,7 +24,16 @@ namespace Travel_App_Web.Models
     {
         [Key]
         public int Id { get; set; }
+
+        [MaxLength(254), Column(TypeName = "varchar")]
         public string SenderEmail { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string SenderName { get; set; } = string.Empty;
+
+        [MaxLength(4096)]
         public string Content { get; set; } = string.Empty;
+        public DateTime DispatchTime { get; set; } = DateTime.UtcNow;
+        public bool IsRead { get; set; } = false;
     }
 }

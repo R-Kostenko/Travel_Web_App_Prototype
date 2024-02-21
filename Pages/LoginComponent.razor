@@ -1,9 +1,11 @@
-﻿@page "/login";
-@using Travel_App_Web.Models;
+﻿@page "/login"
+@using Travel_App_Web.Models
+@using Travel_App_Web.Services
 @using System.Net
 @using System.Net.Http.Json
 @inject HttpClient HttpClient
 @inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
 
 <PageTitle>Log in</PageTitle>
 
@@ -68,18 +70,17 @@
 
 
 @code {
-    LoginModel model;
+    LoginModel model = new ();
     private EditContext editContext = null!;
-    string responseMessage;
-    bool isFormValid;
+    string responseMessage = string.Empty;
+    bool isFormValid = false;
     int attemptsCount = 3;
+    User? user = null;
 
 
     protected override void OnInitialized()
     {
-        model = new();
         editContext = new(model);
-        isFormValid = false;
     }
 
     async Task Login()
@@ -90,11 +91,11 @@
 
         if (response.IsSuccessStatusCode)
         {
-            responseMessage = await response.Content.ReadAsStringAsync();
+            responseMessage = "You have logged in successfully";
             StateHasChanged();
-            Thread.Sleep(2000);
-            Task onSuccess = OnSuccess.InvokeAsync();
-            //await onSuccess;
+            user = await response.Content.ReadFromJsonAsync<User>();
+            await Task.Delay(2000);
+            UserStateService.Update(user);
             await OnExit.InvokeAsync();
         }
         else if (response.StatusCode == HttpStatusCode.BadRequest)
@@ -119,5 +120,4 @@
 
     [Parameter] public EventCallback OnExit { get; set; }
     [Parameter] public EventCallback OnRegistration { get; set; }
-    [Parameter] public EventCallback OnSuccess { get; set; }
 }

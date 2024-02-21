@@ -10,7 +10,5 @@ namespace Travel_App_Web.Models
 
         [Required]
         public string RoleName { get; set; }
-
-        public List<User>? Users { get; set; }
     }
 }

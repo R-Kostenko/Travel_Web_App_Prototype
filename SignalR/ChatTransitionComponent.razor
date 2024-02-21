@@ -1,0 +1,314 @@
+﻿@inherits ComponentBase
+@using Newtonsoft.Json;
+@using Travel_App_Web.Pages
+@using Travel_App_Web.Models
+@using Travel_App_Web.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@using System.Globalization
+@implements IAsyncDisposable
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject IHttpContextAccessor HttpContextAccessor
+@inject UserStateService UserStateService
+
+<style>
+    .chat-list {
+        height: 356px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        padding: 15px;
+        scrollbar-width: thin; /* для Firefox */
+        scrollbar-color: transparent transparent; /* для Firefox */
+    }
+
+        .chat-list::-webkit-scrollbar {
+            width: 5px; /* ширина ползунка для других браузеров */
+        }
+
+        .chat-list::-webkit-scrollbar-thumb {
+            background-color: transparent; /* цвет ползунка для других браузеров */
+        }
+
+    .back-button {
+        color: white;
+        text-decoration: none;
+        margin: -5px;
+    }
+
+    .log-reg {
+        text-align: center;
+        align-self: center;
+    }
+
+    .chat {
+        width: 100%;
+        border: 1px solid #ccc;
+        margin-bottom: 8px;
+        padding: 4px 8px;
+        border-radius: 10px;
+    }
+
+    .chat-sender {
+        font-weight: bold;
+        font-size: 16px;
+        color: red;
+    }
+
+    .chat-content {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 85%;
+        font-size: 15px;
+        color: gray;
+    }
+
+    .message-name {
+        font-weight: bold;
+        font-size: 14px;
+        color: royalblue;
+        margin-right: 5px;
+    }
+
+    .new-messages-item {
+        border-radius: 15px;
+        background-color: red;
+        color: antiquewhite;
+        text-align: center;
+        min-width: 24px;
+        padding: 0px 5px;
+        float: right;
+        margin-top: -43px;
+    }
+
+    .message-time {
+        font-size: 0.8em;
+        color: #888;
+        float: right;
+        margin: -15px -2px -3px 5px;
+    }
+</style>
+
+<div class="card" style="max-width: 20%; min-width: 300px;">
+    <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+        @if (User != null && showChat && User.Role.RoleName == "Admin")
+        {
+            <a class="back-button" role="button" @onclick="CloseChat">
+                <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" class="bi bi-arrow-left-short" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M12 8a.5.5 0 0 1-.5.5H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5a.5.5 0 0 1 .5.5" />
+                </svg>
+            </a>
+        }
+        <h5 class="mb-0">Chat Support</h5>
+        <button type="button" class="btn-close text-white" aria-label="Close" @onclick="OnClose"></button>
+    </div>
+    @if (User is null)
+    {
+        <div class="card-body chat-list">
+            <div class="log-reg">Log In or Register please</div>
+        </div>
+    }
+    else if (User.Role.RoleName == "Admin")
+    {
+        @if (User.Chats.Count == 0)
+        {
+            <div class="card-body chat-list">
+                <div class="log-reg">You don't have any chat yet</div>
+            </div>
+        }
+        else
+        {
+            if (showChat)
+            {
+                <SupportChatComponent UserEmail="@User?.Email" Chat="@chatToOpen" OnSend="async (content, chatId) => await SendMessage(content, chatId)" OnRead="async (userEmail, chatId) => await ReadSet(userEmail, chatId)" @ref="chatComponent" />
+            }
+            else
+            {
+                <div class="card-body chat-list">
+                    @foreach (Chat chat in User.Chats)
+                    {
+                        <div class="chat" @onclick="() => OpenChat(chat)">
+                            <span class="chat-sender">@chat.Messages.OrderByDescending(m => m.DispatchTime).First(m => m.SenderEmail != User.Email).SenderName</span>
+                            <div class="chat-content">
+                                <span class="message-name">@chat.Messages.Select(m => m.SenderName == User.FirstName + "(admin)" ? "You:" : m.SenderName + ':').Last()</span>
+                                @chat.Messages.Last().Content
+                            </div>
+                            @if (chat.Messages.Count(m => m.SenderEmail != User.Email && !m.IsRead) > 0)
+                            {
+                                <div class="new-messages-item">@chat.Messages.Count(m => m.SenderEmail != User.Email && !m.IsRead).ToString()</div>
+                            }
+                            <div class="message-time">@chat.Messages.Last().DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+    }
+    else
+    {
+        chatToOpen = User.Chats.FirstOrDefault();
+        if (showChat)
+        {
+            <SupportChatComponent UserEmail="@User?.Email" Chat="@chatToOpen" OnSend="async (content, chatId) => await SendMessage(content, chatId)" OnRead="async (userEmail, chatId) => await ReadSet(userEmail, chatId)" @ref="chatComponent" />
+        }
+    }
+</div>
+
+@code {
+    public User? User { get; set; } = null;
+    private HubConnection hubConnection = null!;
+    private bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
+    private bool showChat => chatToOpen != null;
+    private Chat? chatToOpen = null;
+    private SupportChatComponent? chatComponent;
+
+    public async Task OnUserUpdate(User? user)
+    {
+        this.User = user;
+
+        if (this.User != null)
+        {
+            await HubConnectAsync();
+            await GetUserChatsAsync();
+            CheckChats();
+        }
+        else if (IsConnected)
+        {
+            await HubDisconnectAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserStateService.OnUserUpdate += OnUserUpdate;
+        User = UserStateService.User;
+
+        if (User != null)
+        {
+            await HubConnectAsync();
+            await GetUserChatsAsync();
+            CheckChats();
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+    private void CheckChats()
+    {
+        if (User.Chats.Count == 0 && User.Role.RoleName != "Admin")
+        {
+            User.Chats.Add(new()
+            {
+                Id = -1,
+                InterlocutorsEmails = new() { new() { Email = User.Email } }
+            });
+        }
+    }
+    private async Task GetUserChatsAsync()
+    {
+        var response = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/current-user-chats");
+        if (response.IsSuccessStatusCode)
+        {
+            User.Chats = await response.Content.ReadFromJsonAsync<List<Chat>>();
+        }
+    }
+
+    private void OpenChat(Chat chat)
+    {
+        chatToOpen = chat;
+    }
+    private void CloseChat()
+    {
+        chatToOpen = null;
+        StateHasChanged();
+    }
+
+    private async Task HubConnectAsync()
+    {
+        var uri = new UriBuilder(NavigationManager.Uri);
+
+        var response = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/get-cookies");
+        string content = await response.Content.ReadAsStringAsync();
+        var cookies = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(content);
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/chathub"), options =>
+            {
+                if (cookies != null)
+                {
+                    foreach (var c in cookies)
+                    {
+                        options.Cookies.Add(new System.Net.Cookie(c.Key, c.Value)
+                        {
+                            Domain = uri.Host,
+                            Path = uri.Path
+                        });
+                    }
+
+                    response = null;
+                    content = string.Empty;
+                    cookies = null;
+                }
+            })
+            .Build();
+
+        hubConnection.On<int, Message>("ReceiveMessage", async (chatId, message) =>
+        {
+            if (User is null) return;
+            if (User.Chats.Exists(c => c.Id == chatId))
+            {
+                if (chatToOpen != null && chatId == chatToOpen.Id)
+                {
+                    await chatComponent?.ReceiveMessage(message);
+                }
+                else
+                {
+                    User.Chats.FirstOrDefault(c => c.Id == chatId)?.Messages.Add(message);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            else
+            {
+                await GetUserChatsAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task SendMessage(string content, int chatId)
+    {
+        await hubConnection.SendAsync("Send", User.Role.RoleName == "Admin" ? User.FirstName + "(admin)" : User.FirstName, content, chatId);
+    }
+
+    private async Task ReadSet(string userEmail, int chatId)
+    {
+        await hubConnection.SendAsync("ReadSet", userEmail, chatId);
+    }
+
+    private async Task HubDisconnectAsync()
+    {
+        if (!IsConnected) return;
+
+        try
+        {
+            await hubConnection.StopAsync();
+        }
+        catch (Exception ex)
+        {
+            string message = ex.Message;
+        }
+        finally { await hubConnection.DisposeAsync(); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        UserStateService.OnUserUpdate -= OnUserUpdate;
+        await HubDisconnectAsync();
+    }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+}

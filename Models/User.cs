@@ -18,14 +18,14 @@ namespace Travel_App_Web.Models
         public string? MiddleName { get; set; }
 
 
-        [Required, MinLength(3),MaxLength(100)]
+        [Required, MinLength(3), MaxLength(100)]
         public string LastName { get; set; } = null!;
 
 
-        [Required, EmailAddress]
+        [Required, EmailAddress/*, MaxLength(254), Column(TypeName = "varchar")*/]
         public string Email { get; set; } = null!;
 
-        [Required, Phone]
+        [Required, Phone/*, MaxLength(15), Column(TypeName = "varchar")*/]
         public string Phone { get; set; } = null!;
 
         [Required, MinLength(8)]
@@ -39,12 +39,10 @@ namespace Travel_App_Web.Models
 
         public void SetPassword(string password)
         {
-            using (var deriveBytes = new Rfc2898DeriveBytes(password, 32, 10000))
-            {
-                byte[] salt = deriveBytes.Salt;
-                byte[] hash = deriveBytes.GetBytes(32);
-                PasswordHash = Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash);
-            }
+            using var deriveBytes = new Rfc2898DeriveBytes(password, 32, 10000);
+            byte[] salt = deriveBytes.Salt;
+            byte[] hash = deriveBytes.GetBytes(32);
+            PasswordHash = Convert.ToBase64String(salt) + ":" + Convert.ToBase64String(hash);
         }
 
         public bool VerifyPassword(string password)
@@ -53,11 +51,9 @@ namespace Travel_App_Web.Models
             byte[] salt = Convert.FromBase64String(parts[0]);
             byte[] hash = Convert.FromBase64String(parts[1]);
 
-            using (var deriveBytes = new Rfc2898DeriveBytes(password, salt, 10000))
-            {
-                byte[] newHash = deriveBytes.GetBytes(32);
-                return newHash.SequenceEqual(hash);
-            }
+            using var deriveBytes = new Rfc2898DeriveBytes(password, salt, 10000);
+            byte[] newHash = deriveBytes.GetBytes(32);
+            return newHash.SequenceEqual(hash);
         }
     }
 

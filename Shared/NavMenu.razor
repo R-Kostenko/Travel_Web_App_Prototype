@@ -1,9 +1,12 @@
-﻿@using Travel_App_Web.Pages;
-@using System.Security.Claims;
+﻿@using Travel_App_Web.Pages
+@using Travel_App_Web.Models
+@using Travel_App_Web.Services
+@using System.Security.Claims
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager NavigationManager
 @inject HttpClient HttpClient
+@inject UserStateService UserStateService
 
 <CascadingAuthenticationState>
 <div class="navbar navbar-expand-lg navbar-dark" style="background-color: #5E86AF; border-radius: 10px 10px 10px 10px;">
@@ -43,7 +46,7 @@
 {
     <div class="overlay">
         <div class="logreg-container">
-            <LoginComponent OnSuccess="CheckAuth" OnExit="HideLogin" OnRegistration="() => { HideLogin(); ShowRegistartion(); }"/>
+            <LoginComponent OnExit="HideLogin" OnRegistration="() => { HideLogin(); ShowRegistartion(); }" />
             @*<button class="btn btn-secondary mt-2" @onclick="HideLogin">Close</button>*@
         </div>
     </div>
@@ -53,22 +56,30 @@
 {
     <div class="overlay">
         <div class="logreg-container">
-            <RegisterComponent OnSuccess="CheckAuth" OnExit="HideRegistartion" />
+            <RegisterComponent OnExit="HideRegistartion" />
             <button class="btn btn-secondary mt-2" @onclick="HideRegistartion">Cancel</button>
         </div>
     </div>
 }
 
 @code {
-    private bool IsAuth = false;
+    private bool IsAuth => user != null;
     private bool collapseNavMenu = true;
     private string responceMessage = string.Empty;
+    private User? user = null;
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+    }
+
+    protected override Task OnInitializedAsync()
+    {
+        UserStateService.OnUserUpdate += GetUser;
+        user = UserStateService.User;
+        return base.OnInitializedAsync();
     }
 
     private bool showLogin = false;
@@ -95,18 +106,48 @@
         showRegistration = false;
     }
 
-    private async Task CheckAuth()
+    private async Task GetUser(User? regUser)
     {
-        var responce = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/current-user");
+        user = regUser;
 
-        if (responce.IsSuccessStatusCode)
+        if (user != null)
         {
-            IsAuth = true;
-
-            responceMessage = await responce.Content.ReadAsStringAsync();
-            StateHasChanged();
+            responceMessage = $"Name: {user.FirstName}, Email: {user.Email}, Role: {user.Role.RoleName}";
         }
         else
-            IsAuth = false;
+        {
+            responceMessage = $"Error getting user object.";
+        }
+
+        await InvokeAsync(StateHasChanged);
+
+        //HttpResponseMessage responce = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/current-user");
+
+        //if (responce.IsSuccessStatusCode)
+        //{
+        //IsAuth = true;
+        //user = await responce.Content.ReadFromJsonAsync<User>();
+        //if (user != null)
+        //{
+        //    responceMessage = $"Name: {user.FirstName}, Email: {user.Email}, Role: {user.Role.RoleName}";                
+        //}
+        //else
+        //{
+        //    responceMessage = $"Error getting user object.";
+        //}
+        //StateHasChanged();
+        //}
+        //else if (responce.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        //{
+        //    IsAuth = false;
+        //    responceMessage = "Authorization fault, Unauthorized exception.";
+        //    StateHasChanged();
+        //}
+        //else
+        //{
+        //    IsAuth = false;
+        //    responceMessage = await responce.Content.ReadAsStringAsync();
+        //    StateHasChanged();
+        //}
     }
 }

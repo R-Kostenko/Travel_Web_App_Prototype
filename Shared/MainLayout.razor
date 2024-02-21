@@ -1,6 +1,36 @@
 ﻿@inherits LayoutComponentBase
+@using Travel_App_Web.Models
+@using Travel_App_Web.SignalR
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
 
 <PageTitle>Travel_App_Web</PageTitle>
+
+<style>
+    .chat-area {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: fit-content;
+    padding: 0;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    z-index: 999;
+}
+
+
+    .chat-icon {
+        background-color: #007bff;
+        color: #fff;
+        position: relative;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+        .chat-icon:hover {
+            background-color: #0056b3;
+        }
+</style>
 
 <div class="container-fluid d-flex flex-column min-vh-100">
     <NavMenu />
@@ -13,9 +43,19 @@
                 </article>
             </main>
         </div>
+        <div class="chat-area">
+            @if (showChat)
+            {
+                <ChatTransitionComponent OnClose="HideChat" />
+            }
+            else
+            {
+                <div class="chat-icon" @onclick="ShowChat">Support</div>
+            }
+        </div>
     </div>
 
-    <footer class="mt-auto py-3" style="background-color: #5E86AF; color: white; border-radius: 10px 10px 10px 10px;">
+    <footer class="mt-auto py-3" style="background-color: #5E86AF; color: white; border-radius: 10px;">
         <div class="container-fluid">
             <div class="row">
                 <div class="col-4">
@@ -37,3 +77,19 @@
         </div>
     </footer>
 </div>
+
+@code{
+    private bool showChat = false;
+
+    private void ShowChat()
+    {
+        showChat = true;
+        StateHasChanged();
+    }
+
+    private void HideChat()
+    {
+        showChat = false;
+        StateHasChanged();
+    }
+}

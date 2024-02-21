@@ -1,12 +1,9 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.Web;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Travel_App_Web.Data;
-using Travel_App_Web.Models;
 using Travel_App_Web.SignalR;
+using Travel_App_Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddScoped<HttpClient>();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 builder.Services.AddDbContextPool<DBContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("Travel_App")));
 
@@ -23,7 +21,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
                     options.LoginPath = new Microsoft.AspNetCore.Http.PathString("/Account/Login");
                     options.AccessDeniedPath = new Microsoft.AspNetCore.Http.PathString("/Account/Login");
                 });
+
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, NameUserIdProvider>();
+builder.Services.AddScoped<UserStateService>();
 
 var app = builder.Build();
 
@@ -47,6 +48,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.MapBlazorHub();
+app.MapHub<ChatHub>("/chathub");
 app.MapFallbackToPage("/_Host");
-app.MapHub<ChatHub>("/chat");
 app.Run();

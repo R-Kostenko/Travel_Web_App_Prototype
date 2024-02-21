@@ -76,10 +76,10 @@
         margin: 0 10px;
     }
 
-/*////////////////////*/
-html, body {
+
+/*html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-}
+}*/
 
 h1:focus {
     outline: none;

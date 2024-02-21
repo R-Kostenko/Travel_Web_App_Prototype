@@ -1,0 +1,343 @@
+﻿@inherits ComponentBase
+@using Travel_App_Web.Models
+@using System.Globalization
+@using System.Threading.Tasks
+@inject IJSRuntime JSRuntime
+
+<style>
+    .chat-container {
+        height: 300px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        padding: 15px;
+        padding-right: 10px;
+        scrollbar-width: thin; /* для Firefox */
+        scrollbar-color: transparent transparent; /* для Firefox */
+    }
+        .chat-container::-webkit-scrollbar {
+            width: 5px; /* ширина ползунка для других браузеров */
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background-color: transparent; /* цвет ползунка для других браузеров */
+        }
+
+    .log-reg {
+        text-align: center;
+        align-self: center;
+    }
+
+    .message {
+        max-width: 60%;
+        width: fit-content;
+        border: 1px solid #ccc;
+        margin-bottom: 8px;
+        padding: 4px 8px;
+        border-radius: 15px;
+    }
+
+    .message-user {
+        align-self: flex-end;
+        background-color: royalblue;
+        border-color: royalblue;
+        color: antiquewhite;
+    }
+
+    .message-system {
+        text-align: center;
+        align-self: center;
+        background-color: lightgrey;
+        max-width: 80%;
+    }
+
+    .new-mess-marker {
+        width: 100%;
+        height: fit-content;
+        text-align: center;
+        padding: 2px;
+        margin-bottom: 8px;
+        background-color: lightgrey;
+        color: royalblue;
+        font-size: 12px;
+        border-radius: 3px;
+    }
+
+    .date-marker {
+        height: fit-content;
+        padding: 2px 5px;
+        margin-bottom: 8px;
+        align-self: center;
+        background-color: lightgrey;
+        color: royalblue;
+        font-size: 12px;
+        border-radius: 10px;
+    }
+
+    .message-top {
+        border-bottom-left-radius: 5px;
+        margin-bottom: 2px;
+    }
+
+    .message-top-user {
+        border-bottom-right-radius: 5px;
+        margin-bottom: 2px;
+    }
+
+    .message-middle {
+        border-top-left-radius: 5px;
+        border-bottom-left-radius: 5px;
+        margin-bottom: 2px;
+    }
+
+    .message-middle-user {
+        border-top-right-radius: 5px;
+        border-bottom-right-radius: 5px;
+        margin-bottom: 2px;
+    }
+
+    .message-bottom {
+        border-top-left-radius: 5px;
+        margin-bottom: 8px;
+    }
+
+    .message-bottom-user {
+        border-top-right-radius: 5px;
+        margin-bottom: 8px;
+    }
+
+    .message-sender {
+        font-weight: bold;
+        font-size: smaller;
+        color: red;
+    }
+
+    .message-content {
+        word-wrap: break-word;
+        margin-bottom: 0px;
+        font-size: 15px;
+    }
+
+    .message-time {
+        font-size: 0.8em;
+        color: #888;
+        float: right;
+        margin: 6px -2px -3px 5px;
+    }
+
+    .message-time-user {
+        font-size: 0.8em;
+        color: antiquewhite;
+        float: right;
+        margin: 6px -2px -3px 5px;
+    }
+
+    .user-input {
+        margin-right: 10px;
+        border-radius: 5px 5px 5px 5px;
+    }
+
+    .send-button {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        border-radius: 100%;
+        font-size: 26px;
+        transform: rotate(-90deg);
+        text-decoration: none;
+    }
+</style>
+
+<div @ref="chatContainer" class="card-body chat-container">
+    @if (Chat != null && Chat.Messages.Count > 0)
+    {
+        for (int i = 0; i < Chat.Messages.Count; i++)
+        {
+            if (i == 0 || (i > 0 && Chat.Messages[i - 1].DispatchTime.Date != Chat.Messages[i].DispatchTime.Date))
+            {
+                <div class="date-marker">
+                    @Chat.Messages[i].DispatchTime.ToLocalTime().ToString("dd MMM")
+                </div>
+            }
+            if (i > 0 && Chat.Messages[i].SenderEmail != UserEmail && (Chat.Messages[i - 1].IsRead && !Chat.Messages[i].IsRead))
+            {
+                <div class="new-mess-marker">
+                    New messages
+                </div>
+            }
+
+            if (Chat.Messages[i].SenderName == "System")
+            {
+                <div class="message message-system">
+                    <div class="message-content">
+                        @Chat.Messages[i].Content
+                        <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                    </div>
+                </div>
+            }
+            else if (Chat.Messages[i].SenderEmail == UserEmail)
+            {
+                if ((i == 0 || (i > 0 && Chat.Messages[i - 1].SenderEmail != Chat.Messages[i].SenderEmail))
+                    && i + 1 < Chat.Messages.Count 
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                {
+                    <div class="message message-user message-top-user">
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+                else if ((i > 0 && i + 1 < Chat.Messages.Count)
+                    && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                {
+                    <div class="message message-user message-middle-user">
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+                else if (i > 0 && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && (i + 1 == Chat.Messages.Count || (i + 1 < Chat.Messages.Count && Chat.Messages[i + 1].SenderEmail != Chat.Messages[i].SenderEmail)))
+                {
+                    <div class="message message-user message-bottom-user">
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="message message-user">
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                if ((i == 0 || (i > 0 && Chat.Messages[i - 1].SenderEmail != Chat.Messages[i].SenderEmail))
+                    && i + 1 < Chat.Messages.Count
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                {
+                    <div class="message message-top">
+                        <span class="message-sender">@Chat.Messages[i].SenderName</span>
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+                else if ((i > 0 && i + 1 < Chat.Messages.Count)
+                    && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                {
+                    <div class="message message-middle">
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+                else if (i > 0 && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && (i + 1 == Chat.Messages.Count || (i + 1 < Chat.Messages.Count && Chat.Messages[i + 1].SenderEmail != Chat.Messages[i].SenderEmail)))
+                {
+                    <div class="message message-bottom">
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="message">
+                        <span class="message-sender">@Chat.Messages[i].SenderName</span>
+                        <div class="message-content">
+                            @Chat.Messages[i].Content
+                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        </div>
+                    </div>
+                }
+            }
+        }
+    }
+    else
+    {
+        <div class="message message-system">
+            <div class="message-content">
+                This chat is empty, write your first message
+            </div>
+        </div>
+    }
+</div>
+<div class="card-footer">
+    <div class="input-group">
+        <input @bind-value="userInput" type="text"  class="form-control user-input" placeholder="Type your message..." />
+        <div class="input-group-append">
+            <a class="send-button" role="button" @onclick="SendMessage">
+                ➤
+            </a>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string UserEmail { get; set; } = null!;
+    [Parameter] public Chat Chat { get; set; } = null!;
+    private string userInput = string.Empty;
+    private ElementReference chatContainer;
+
+    protected override async void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToBottom", chatContainer);
+            if (Chat.Messages.Any(m => !m.IsRead && m.SenderEmail != UserEmail))
+            {
+                await OnRead?.Invoke(UserEmail, Chat.Id);
+                Chat.Messages.Where(m => !m.IsRead && m.SenderEmail != UserEmail).ToList().ForEach(m => m.IsRead = true);
+            }
+        }
+    }
+
+    public async Task SendMessage()
+    {
+        if (userInput == string.Empty) return;
+
+        await ReceiveMessage(new()
+        {
+            SenderEmail = UserEmail,
+            SenderName = "You",
+            Content = userInput,
+            IsRead = true
+        });
+
+        string receiverEmail = Chat?.InterlocutorsEmails.FirstOrDefault(e => e.Email != UserEmail)?.Email ?? "";
+        await OnSend?.Invoke(userInput, Chat.Id);
+        userInput = string.Empty;
+    }
+
+    public async Task ReceiveMessage(Message message)
+    {
+        Task? readTask = null;
+        if (!message.IsRead)
+        {
+            message.IsRead = true;
+            readTask = OnRead?.Invoke(UserEmail, Chat.Id);
+        }
+        Chat.Messages.Add(message);
+        await InvokeAsync(StateHasChanged);
+        await JSRuntime.InvokeVoidAsync("scrollToBottom", chatContainer);
+        if (readTask != null) await readTask;
+    }
+
+    [Parameter] public Func<string, int, Task>? OnSend { get; set; }
+    [Parameter] public Func<string, int, Task>? OnRead { get; set; }
+}

@@ -1,9 +1,11 @@
 ﻿@page "/register";
-@using Travel_App_Web.Models;
+@using Travel_App_Web.Models
+@using Travel_App_Web.Services
 @using System.Net
 @using System.Net.Http.Json
 @inject HttpClient HttpClient
 @inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
 
 <PageTitle>Registration</PageTitle>
 
@@ -89,6 +91,7 @@
     private EditContext editContext = null!;
     string responseMessage = string.Empty;
     bool isFormValid;
+    User? user = null;
 
     async Task RegisterAsync()
     {
@@ -103,11 +106,11 @@
 
         if (response.IsSuccessStatusCode)
         {
-            responseMessage = await response.Content.ReadAsStringAsync();
+            responseMessage = "You have successfully registered!";
             StateHasChanged();
-            Thread.Sleep(2000);
-            Task task = OnSuccess.InvokeAsync();
-            //await task;
+            user = await response.Content.ReadFromJsonAsync<User>();
+            await Task.Delay(2000);
+            UserStateService.Update(user);
             await OnExit.InvokeAsync();
         }
         else if (response.StatusCode == HttpStatusCode.BadRequest)
@@ -137,5 +140,5 @@
     }
 
     [Parameter] public EventCallback OnExit { get; set; }
-    [Parameter] public EventCallback OnSuccess { get; set; }
+    //[Parameter] public Action<User?> UserChanged { get; set; } = null!;
 }

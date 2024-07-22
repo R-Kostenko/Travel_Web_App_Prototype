@@ -1,0 +1,883 @@
+﻿@page "/tour-order/{TourId}"
+@using Hangfire;
+@using Microsoft.EntityFrameworkCore
+@using Models
+@using Services
+@using Services.Mail
+@using System.Collections.Concurrent;
+@using System.Text;
+@using System.Globalization;
+@using Travel_App_Web.Data
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject DBContext DBContext
+@inject CurrencyConverter CurrencyConverter
+@inject UserStateService UserStateService
+@inject AmadeusService AmadeusService
+@inject EmailSenderService EmailSender
+
+<PageTitle>Oredering - @tour.Title</PageTitle>
+
+<style>
+    .main-block {
+        border-radius: 30px;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        width: fit-content;
+    }
+
+    .main-subblock {
+        border-radius: 20px;
+        background-color: rgba(255, 255, 255, 0.9);
+        width: fit-content;
+    }
+
+    .order-btn {
+        font-size: 20px;
+        margin: 2px;
+        border: 2px solid transparent;
+    }
+
+    .participant-block {
+        position: relative;
+        margin-bottom: 20px;
+        width: 100%;
+        padding: 15px 20px;
+        border: 1px solid lightgrey;
+        border-radius: 20px;
+    }
+
+        .participant-block > h6{
+            margin: 0;
+        }
+
+    .drop-button {
+        text-decoration: none;
+        margin: -5px;
+    }
+
+    .flipped {
+        transform: rotate(180deg);
+    }
+
+    .form-container {
+        width: 100%;
+        display: inline-flex;
+    }
+
+        .form-container div:not(:first-child) {
+            margin-left: 10px;
+        }
+
+    .hotel-block {
+        position: relative;
+        display: inline-flex;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+        width: 100%;
+        padding: 20px 20px;
+        border: 1px solid lightgrey;
+        border-radius: 20px;
+        background-color: beige;
+    }
+
+        .hotel-block > h6 {
+        margin: 0;
+    }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+@if (isLoading)
+{
+    <div style="display: flex; width: 100%; justify-content: center;">
+        <img style="height: 40px;" src="/icons/plane.gif" alt="Loading..." />
+    </div>
+}
+else
+{
+    <div style="width: 100%; display: flex; justify-content: center;">
+        <div class="card main-block">
+            <div class="card-body main-subblock mb-3">
+                <h5 class="card-title" style="margin-bottom: 20px;">Participants</h5>
+                
+                <div class="participant-block" style="margin-bottom: 30px;">
+                    <h6>(You) @ParticipantUnit.PrimaryUser.LastName @ParticipantUnit.PrimaryUser.FirstName @ParticipantUnit.PrimaryUser.MiddleName, @ParticipantUnit.PrimaryUser.Email, @ParticipantUnit.PrimaryUser.Phone, @(ParticipantUnit.PrimaryUser.DateOfBirth.AddYears(18) < DateTime.Now ? "Adult" : "Child/adolescent")</h6>
+                </div>
+
+                @foreach (var participant in ParticipantUnit.OtherUsers)
+                {
+                    var participantObj = participant;
+
+                    <div class="participant-block" style="">
+                        @if (participantObj.User != null)
+                        {
+                            <h6>@participantObj.User.LastName @participantObj.User.FirstName @participantObj.User.MiddleName, @participantObj.User.Email, @participantObj.User.Phone, @(participantObj.User.DateOfBirth.AddYears(18) < DateTime.Now ? "Adult" : "Child/adolescent")</h6>
+                        }
+                        else
+                        {
+                            <h6>@participantObj.LastName @participantObj.FirstName @participantObj.MiddleName, @participantObj.Email, @participantObj.Phone, @(participantObj.DateOfBirth.Value.AddYears(18) < DateTime.Now ? "Adult" : "Child/adolescent")</h6>
+                        }
+                        <button type="button" class="btn-close text-white" style="position: absolute; top: 10px; right: 10px; background-color: rgba(128, 128, 128, 0.7); width: 20px; height: 20px; border-radius: 20px;" aria-label="Close" @onclick="() => ParticipantUnit.OtherUsers.RemoveAt(ParticipantUnit.OtherUsers.IndexOf(participantObj))"></button>
+                    </div>
+                }
+
+                @if (addPart)
+                {
+                    <div class="participant-block" style="margin-top: 10px;">
+                        <div style="width: 100%; padding-bottom: 20px; border-bottom: 1px dashed lightgrey;">
+                            <h6 style="font-size: 19px;">If the user is already registered</h6>
+                            <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                                <label for="inputEmail" class="form-label">Email</label>
+                                <div style="display: inline-flex; align-items: center;">
+                                    <InputText @bind-Value="partEmail" class="form-control" id="inputEmail" placeholder="example@gmail.com" />
+                                    <button class="btn btn-warning" style="margin-left: 20px; display:flex; align-items: center; height: 34.5px; width: 34.5px; border-radius: 20px; justify-content: center;" @onclick="GetByEmail">
+                                        🔍
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6 style="font-size: 19px;">Or</h6>
+
+                            <div class="mb-3 form-container">
+                                <div style="width: 49%;">
+                                    <label for="inputFirstName" class="form-label">First name*</label>
+                                    <InputText @bind-Value="Participant.FirstName" class="form-control" id="inputFirstName" placeholder="John" />
+                                </div>
+                                <div style="width: 49%;">
+                                    <label for="inputLastName" class="form-label">Last name*</label>
+                                    <InputText @bind-Value="Participant.LastName" class="form-control" id="inputLastName" placeholder="Doe" />
+                                </div>
+                            </div>
+
+                            <div class="mb-3 form-container">
+                                <div style="width: 49%;">
+                                <label for="inputMiddleName" class="form-label" style="font-weight: 400;">Middle name</label>
+                                    <InputText @bind-Value="Participant.MiddleName" class="form-control" id="inputMiddleName" />
+                                </div>
+                                <div>
+                                <label for="inputGender" class="form-label">Gender*</label>
+                                    <select @bind="Participant.Gender" class="form-select" id="inputGender">
+                                        @foreach (var gender in Enum.GetValues(typeof(Gender)))
+                                        {
+                                            var enumValue = (Gender)gender;
+                                            <option value="@enumValue">@enumValue.GetEnumMemberValue()</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-3" style="width: 100%;">
+                                <label for="inputEmail" class="form-label">Email*</label>
+                                <InputText @bind-Value="Participant.Email" class="form-control" id="inputEmail" placeholder="example@gmail.com" />
+                            </div>
+
+                            <div class="mb-3" style="width: 100%;">
+                            <label for="inputPhone" class="form-label">Phone*</label>
+                                <InputText @bind-Value="Participant.Phone" class="form-control" id="inputPhone" placeholder="+380961234567" />
+                            </div>
+
+                            <div class="mb-3 form-container">
+                                <div>
+                                    <label for="inputBirthDate" class="form-label">Date of birth*</label>
+                                    <InputDate id="inputBirthDate" @bind-Value="Participant.DateOfBirth" class="form-control" min="@DateTime.Today.AddYears(-80).ToString("yyyy-MM-dd")" max="@DateTime.Today.AddYears(-6).ToString("yyyy-MM-dd")" />
+                                </div>
+                            </div>
+
+                        <div style="width: 100%; display: flex; justify-content: center;">
+                            <button class="btn additional-btn" @onclick="AddParticipant">Add</button>
+                        </div>
+                    </div>
+                }
+
+                @if (freePlaces > ParticipantUnit.OtherUsers.Count + 1)
+                {
+                    <div style="width: 100%; display: flex; justify-content: center;">
+                        <button class="additional-btn" @onclick="() => { addPart = true; Participant.Gender = Gender.ML; }">Add a participant</button>
+                    </div>
+                }
+            </div>
+
+            @if (tour.HotelsOffers.Count > 0)
+            {
+                <div class="card-body main-subblock mb-3">
+                    <h5 class="card-title" style="margin-bottom: 20px;">Hotels booking</h5>
+
+                    @if (isSearched && !isOffersSearching && hotelsOffers.Count == 0)
+                    {
+                        <h6 class="" style="margin-bottom: 20px;">No offers were found</h6>
+                    }
+                    else if (isOffersSearching)
+                    {
+                        <div style="display: flex; width: 100%; justify-content: center;">
+                            <img style="height: 20px;" src="/icons/plane.gif" alt="Loading..." />
+                        </div>
+                    }
+                    else if (hotelsOffers.Count > 0)
+                    {
+                        foreach (var offerPair in hotelsOffers)
+                        {
+                            var offerObj = offerPair;
+                            string paymentMethods = string.Empty;
+                            
+                            if (offerObj.HotelOffer.PolicyDetails?.Deposit?.Methods != null)
+                            {
+                                paymentMethods = string.Join(", ", offerObj.HotelOffer.PolicyDetails?.Deposit?.Methods).Replace("_", " ").ToLowerInvariant();
+                                if (offerObj.HotelOffer.PolicyDetails?.Deposit?.CreditCards != null)
+                                    paymentMethods += $" ({string.Join(", ", offerObj.HotelOffer.PolicyDetails?.Deposit?.CreditCards.Select(c => c.GetEnumMemberValue()))})";
+                            }
+                            if (offerObj.HotelOffer.PolicyDetails?.Prepay?.Methods != null)
+                            {
+                                paymentMethods = string.Join(", ", offerObj.HotelOffer.PolicyDetails?.Prepay?.Methods).Replace("_", " ").ToLowerInvariant();
+                                if (offerObj.HotelOffer.PolicyDetails?.Prepay?.CreditCards != null)
+                                    paymentMethods += $" ({string.Join(", ", offerObj.HotelOffer.PolicyDetails?.Prepay?.CreditCards.Select(c => c.GetEnumMemberValue()))})";
+                            }
+                            if (offerObj.HotelOffer.PolicyDetails?.HoldTime?.Methods != null)
+                            {
+                                paymentMethods = string.Join(", ", offerObj.HotelOffer.PolicyDetails?.HoldTime?.Methods).Replace("_", " ").ToLowerInvariant();
+                                if (offerObj.HotelOffer.PolicyDetails?.HoldTime?.CreditCards != null)
+                                    paymentMethods += $" ({string.Join(", ", offerObj.HotelOffer.PolicyDetails?.HoldTime?.CreditCards.Select(c => c.GetEnumMemberValue()))})";
+                            }
+                            if (offerObj.HotelOffer.PolicyDetails?.Guarantee?.Methods != null)
+                            {
+                                paymentMethods = string.Join(", ", offerObj.HotelOffer.PolicyDetails?.Guarantee?.Methods).Replace("_", " ").ToLowerInvariant();
+                                if (offerObj.HotelOffer.PolicyDetails?.Guarantee?.CreditCards != null)
+                                    paymentMethods += $" ({string.Join(", ", offerObj.HotelOffer.PolicyDetails?.Guarantee?.CreditCards.Select(c => c.GetEnumMemberValue()))})";
+                            }
+
+                            <div class="hotel-block">
+                                <h6>@(offerObj.HotelName + ", " + offerObj.HotelOffer.CheckInDate.ToShortDateString() + " - " + offerObj.HotelOffer.CheckOutDate.ToShortDateString() + ", " + offerObj.HotelOffer.AdultsQuantity + " persons, " + offerObj.HotelOffer.Room?.Beds + " beds, " + offerObj.HotelOffer.Description + ", " + paymentMethods)</h6>
+                                <button type="button" class="btn-close text-white" style="position: absolute; top: 16px; right: 10px; background-color: rgba(128, 128, 128, 0.7); width: 20px; height: 20px; border-radius: 20px;" aria-label="Close" @onclick="() => hotelsOffers.Remove(offerObj)"></button>
+                            </div>
+                        }
+                    }
+
+                    <div style="width: 100%; display: flex; justify-content: center;">
+                        <button type="submit" class="additional-btn" @onclick="SearchOffers">Search for offers</button>
+                    </div>
+                </div>
+            }
+
+            <div class="card-body main-subblock mb-3">
+                <h5 class="card-title" style="margin-bottom: 20px;">Credit card</h5>
+                <div>
+                    <input title="Card Number" @oninput="FormatNumberInput" @bind-value="cardNumber" class="form-control" style="border-radius: 10px 10px 0 0;border-bottom: 0;" id="inputCardNumber" placeholder="0000 0000 0000 0000" />
+                    <div style="display: inline-flex;">
+                        <input title="Expiry Date" @oninput="FormatDateInput" @bind-value="cardExpiryDateStr" class="form-control" style="border-radius: 0 0 0 10px;" id="inputCardExpiryDate" placeholder="MM/YY" />
+                        <select @bind="selectedVendor" class="form-select" style="border-radius: 0 0 10px 0; border-left: 0;">
+                            @foreach (var vendor in Enum.GetValues(typeof(VendorCodes)))
+                            {
+                                var enumValue = (VendorCodes)vendor;
+                                <option value="@enumValue">@enumValue.GetEnumMemberValue()</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+                <h6>@(Math.Round((tour.ExtraAmount + priceWithoutHotels + hotelsOffers.Sum(ho => CurrencyConverter.Convert((double)ho.HotelOffer.PriceTotal, ho.HotelOffer.Currency, tour.Currency))), 2)) @(tour.Currency)</h6>
+                <button type="submit" class="primary-btn order-btn" @onclick="Order">Order</button>
+                <h6>Be sure that your details are correct and you want to book a tour</h6>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string TourId { get; set; } = string.Empty;
+    private Tour tour = new();
+    private double priceWithoutHotels = 0;
+    private int freePlaces = 0;
+    private bool isLoading { get; set; } = false;
+    private string responseMessage { get; set; } = string.Empty;
+
+    private ParticipantUnit ParticipantUnit { get; set; } = new();
+    private Participant Participant { get; set; } = new();
+    private string partEmail { get; set; } = string.Empty;
+    private bool addPart = false;
+
+    private List<(string HotelName, HotelsOffer HotelOffer)> hotelsOffers { get; set; } = new();
+    private bool isOffersSearching { get; set; } = false;
+    private bool isSearched { get; set; } = false;
+
+    private string cardNumber = string.Empty;
+    private string cardExpiryDateStr = string.Empty;
+    private DateTime cardExpiryDate;
+    private VendorCodes selectedVendor = VendorCodes.CA;
+    private bool manualCheck = false;
+
+    private bool isOrdering = false;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckUser();
+
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("");
+        UserStateService.OnUserUpdate += (user) => CheckUser();
+
+        try
+        {
+            isLoading = true;
+            await InvokeAsync(StateHasChanged);
+
+            long tourId = Convert.ToInt64(TourId);
+
+            var requestedTour = await DBContext.Tours
+                                            .Include(t => t.Agency)
+                                            .ThenInclude(a => a.Country)
+                                            .Include(t => t.HotelsOffers)
+                                            .ThenInclude(ho => ho.Room)
+                                            .Include(t => t.Hotels)
+                                            .Include(t => t.Program)
+                                            .AsSplitQuery()
+                                            .FirstOrDefaultAsync(t => t.TourId == tourId);
+
+
+            if (requestedTour != null)
+            {
+                if (DateTime.Now.AddDays(7) > requestedTour.StartDate.Value)
+                {
+                    responseMessage = "Tour booking is no longer available";
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(2000);
+                    NavigationManager.NavigateTo("");
+                }
+
+                await DBContext.Entry(requestedTour)
+                    .Collection(t => t.Participants)
+                    .LoadAsync();
+
+                foreach (var participant in requestedTour.Participants)
+                {
+                    await DBContext.Entry(participant)
+                        .Reference(p => p.PrimaryUser)
+                        .LoadAsync();
+                    await DBContext.Entry(participant)
+                        .Collection(p => p.OtherUsers)
+                        .LoadAsync();
+
+                    foreach (var other in participant.OtherUsers)
+                    {
+                        await DBContext.Entry(other)
+                            .Reference(o => o.User)
+                            .LoadAsync();
+                    }
+                }
+
+                freePlaces = requestedTour.ParticipantsMaxNumber - requestedTour.Participants.Sum(p => p.OtherUsers.Count + 1);
+
+                if (freePlaces < 1)
+                    throw new Exception("There are no available places");
+
+                if (UserStateService.UserCountry?.CCA2 != requestedTour.Agency?.Country?.CCA2)
+                {
+                    responseMessage = "This tour is not available in your country";
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(2000);
+                    NavigationManager.NavigateTo("");
+                }
+                else if (requestedTour.Participants.Any(p => p.PrimaryUser.Email == UserStateService.User.Email || p.OtherUsers.Any(op => op.Email == UserStateService.User.Email)))
+                {
+                    responseMessage = "You are already enrolled in this tour";
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(2000);
+                    NavigationManager.NavigateTo("");
+                }
+                else
+                {
+                    ParticipantUnit.PrimaryUser = UserStateService.User;
+                }
+
+                DBContext.Entry(requestedTour).State = EntityState.Detached;
+                await DBContext.SaveChangesAsync();
+
+                tour = requestedTour;
+                tour.Program = tour.Program.OrderBy(ac => ac.StartDate).ToList();
+
+                UpdatePriceWithoutHotels();
+            }
+            else
+                NavigationManager.NavigateTo("tours");
+
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task GetByEmail()
+    {
+        if (string.IsNullOrEmpty(partEmail))
+        {
+            responseMessage = "The Email field must be filled in";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var requestedUser = await DBContext.Users.Include(u => u.Country).Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == partEmail);
+
+        if (requestedUser == null)
+            responseMessage = "User not found";
+        else if (requestedUser.Country.CCA2 != tour.Agency.Country.CCA2)
+            responseMessage = "User's country does not match the tour country";
+        else if (requestedUser.Role.RoleName == "Admin")
+            responseMessage = "User's role does not match the allowed role";
+        else if (ParticipantUnit.PrimaryUser.Email == partEmail
+                || ParticipantUnit.OtherUsers.Any(o => o.User != null ? o.User.Email == partEmail : o.Email == partEmail)
+                || tour.Participants.Any(p => p.PrimaryUser.Email == partEmail
+                    || p.OtherUsers.Any(o => o.User != null ? o.User.Email == partEmail : o.Email == partEmail)))
+            responseMessage = "The user is already registered for the tour";
+        else
+        {
+            ParticipantUnit.OtherUsers.Add(new() { User = requestedUser });
+            Participant = new();
+            partEmail = string.Empty;
+            addPart = false;
+        }
+
+        UpdatePriceWithoutHotels();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AddParticipant()
+    {
+        if (string.IsNullOrEmpty(Participant.Email))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Enter email";
+        if (string.IsNullOrEmpty(Participant.LastName))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Enter last name";
+        if (string.IsNullOrEmpty(Participant.FirstName))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Enter first name";
+        if (string.IsNullOrEmpty(Participant.MiddleName))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Enter middle name";
+        if (string.IsNullOrEmpty(Participant.Phone))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Enter phone number";
+        if (Participant.DateOfBirth is null)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Enter date of birth";
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        var requestedUser = await DBContext.Users.Include(u => u.Country).Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == partEmail);
+        if (requestedUser != null)
+        {
+            if (requestedUser.Country.CCA2 != tour.Agency.Country.CCA2)
+                responseMessage = "User's country does not match the tour country";
+            else if (requestedUser.Role.RoleName == "Admin")
+                responseMessage = "User's role does not match the allowed role";
+            else if (ParticipantUnit.PrimaryUser.Email == partEmail
+                    || ParticipantUnit.OtherUsers.Any(o => o.User != null ? o.User.Email == partEmail : o.Email == partEmail)
+                    || tour.Participants.Any(p => p.PrimaryUser.Email == partEmail
+                        || p.OtherUsers.Any(o => o.User != null ? o.User.Email == partEmail : o.Email == partEmail)))
+                responseMessage = "The user is already registered for the tour";
+            else
+            {
+                ParticipantUnit.OtherUsers.Add(new() { User = requestedUser });
+                Participant = new();
+                addPart = false;
+                partEmail = string.Empty;
+            }
+        }
+        else
+        {
+            Participant.User = null;
+            ParticipantUnit.OtherUsers.Add(Participant);
+            Participant = new();
+            addPart = false;
+            partEmail = string.Empty;
+        }
+
+        UpdatePriceWithoutHotels();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdatePriceWithoutHotels()
+    {
+        double amount = 0;
+        string currency = tour.Currency.ToLower();
+
+        @foreach (var activity in tour.Program)
+        {
+            double price;
+            switch (activity)
+            {
+                case TourOrSideActivity tos:
+                    price = tos.PriceAmount != null ? CurrencyConverter.Convert(tos.PriceAmount.Value, tos.Currency, tour.Currency) * (1 + ParticipantUnit.OtherUsers.Count) : 0;
+                    break;
+                case TransferOffer to:
+                    price = to.TranType is TransferOffer.TransferType.SHARED
+                    || to.TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                    || to.TranType is TransferOffer.TransferType.AIRPORT_BUS
+                    ? (to.PriceAmount != null ? CurrencyConverter.Convert(to.PriceAmount.Value, to.Currency, tour.Currency) * (1 + ParticipantUnit.OtherUsers.Count) : 0)
+                    : ((to.PriceAmount != null ? CurrencyConverter.Convert(to.PriceAmount.Value, to.Currency, tour.Currency) : 0) / tour.ParticipantsMaxNumber * (1 + ParticipantUnit.OtherUsers.Count));
+                    break;
+                default:
+                    price = 0;
+                    break;
+            }
+
+            price = Math.Round(price, 2);
+            amount += price;
+        }
+
+        priceWithoutHotels = amount;
+    }
+
+    private async Task SearchOffers()
+    {
+        if (string.IsNullOrEmpty(ParticipantUnit.PrimaryUser.Email))
+        {
+            responseMessage = "The main participant has not been selected";
+            return;
+        }
+
+        int adultsNumber = (DateTime.Now.AddYears(-18) > ParticipantUnit.PrimaryUser.DateOfBirth ? 1 : 0) 
+            + ParticipantUnit.OtherUsers.Count(u => u.User != null ? DateTime.Now.AddYears(-18) > u.User.DateOfBirth : DateTime.Now.AddYears(-18) > u.DateOfBirth);
+
+        try
+        {
+            hotelsOffers = new();
+            isOffersSearching = true;
+            await InvokeAsync(StateHasChanged);
+
+            Dictionary<string, string> hotelIdNameDic = new();
+            foreach (var hotel in tour.Hotels)
+            {
+                hotelIdNameDic.TryAdd(hotel.HotelId, hotel.Name.ToUpperInvariant());
+            }
+
+            List<Task> offersTasks = new();
+            var groupedTourHotelsOffers = tour.HotelsOffers
+                .GroupBy(ho => ho.CheckInDate)
+                .Select(group => group.First())
+                .ToList();
+            foreach (var offer in groupedTourHotelsOffers)
+            {
+                var localOffer = offer;
+
+                offersTasks.Add(Task.Run(async () =>
+                {
+                    var result = await AmadeusService.GetHotelsOffersAsync(new string[] { localOffer.HotelId }, TimeZoneInfo.Utc, localOffer.CheckInDate, localOffer.CheckOutDate, adults: adultsNumber);
+                    var hotelName = hotelIdNameDic[localOffer.HotelId];
+
+                    if (result.Count > 0)
+                    {
+                        foreach (var offerObj in result.First().Value)
+                        {
+                            hotelsOffers.Add((hotelName, offerObj));
+                        }
+                    }
+                }));
+            }
+
+            await Task.WhenAll(offersTasks);
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            isOffersSearching = false;
+            isSearched = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+    }
+
+    private void FormatNumberInput(ChangeEventArgs args)
+    {
+        string inputText = args.Value.ToString();
+
+        string digitsOnly = new string(inputText.Where(char.IsDigit).ToArray());
+        if (digitsOnly.Length > 16)
+            return;
+
+        StringBuilder formattedText = new StringBuilder();
+        for (int i = 0; i < digitsOnly.Length; i++)
+        {
+            if (i > 0 && i % 4 == 0)
+            {
+                formattedText.Append(" ");
+            }
+            formattedText.Append(digitsOnly[i]);
+        }
+
+        cardNumber = formattedText.ToString();
+    }
+    private void FormatDateInput(ChangeEventArgs args)
+    {
+        string inputText = args.Value.ToString();
+
+        string digitsOnly = new string(inputText.Where(char.IsDigit).ToArray());
+        if (digitsOnly.Length > 5)
+            return;
+
+        StringBuilder formattedText = new StringBuilder();
+        for (int i = 0; i < digitsOnly.Length; i++)
+        {
+            if (i > 0 && i % 2 == 0)
+            {
+                formattedText.Append("/");
+            }
+            formattedText.Append(digitsOnly[i]);
+        }
+
+        cardExpiryDateStr = formattedText.ToString();
+    }
+
+    private async Task Order()
+    {
+        await CheckUser();
+
+        if (UserStateService.UserCountry?.CCA2 != tour.Agency?.Country?.CCA2)
+        {
+            responseMessage = "This tour is not available in your country";
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(2000);
+            NavigationManager.NavigateTo("");
+        }
+        else if (DateTime.Now.AddDays(7) > tour.StartDate.Value)
+        {
+            responseMessage = "Booking for this tour is no longer available";
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(2000);
+            NavigationManager.NavigateTo("");
+        }
+
+        manualCheck = true;
+
+        if (cardNumber.Length < 19 || cardNumber.Replace(" ", "").Any(c => !char.IsDigit(c)))
+        {
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Invalid card number format";
+            manualCheck = false;
+        }
+
+        if (cardExpiryDateStr.Length < 5 || cardExpiryDateStr.Replace("/", "").Any(c => !char.IsDigit(c)))
+        {
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Invalid card expiry date";
+            manualCheck = false;
+        }
+        if (!DateTime.TryParseExact(cardExpiryDateStr, "MM/yy", CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out cardExpiryDate)
+            || cardExpiryDate < DateTime.Now)
+        {
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                "Invalid card expiry date";
+            manualCheck = false;
+        }
+
+        if (manualCheck == false) return;
+
+        CreditCard card = new()
+            {
+                Number = cardNumber.Replace(" ", ""),
+                ExpiryDate = cardExpiryDate,
+                VendorCode = selectedVendor
+            };
+        ParticipantUnit.CreditCard = card;
+
+        if (hotelsOffers.Count == 0 && tour.HotelsOffers.Count > 0)
+        {
+            responseMessage = "You did not select any hotel offers";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+        else if (hotelsOffers.Count > 0)
+        {
+            try
+            {
+                isOrdering = true;
+                await InvokeAsync(StateHasChanged);
+
+                ParticipantUnit.HotelsOrders = await AmadeusService.BookHotels(ParticipantUnit, hotelsOffers.Select(p => p.HotelOffer).ToList());
+            }
+            catch (Exception ex)
+            {
+                responseMessage = ex.Message;
+                isOrdering = false;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+
+        using (var transaction = await DBContext.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                var reqTour = await DBContext.Tours.FindAsync(this.tour.TourId);
+
+                var orders = ParticipantUnit.HotelsOrders;
+                ParticipantUnit.HotelsOrders = new();
+
+                ParticipantUnit.PrimaryUser = await DBContext.Users.FindAsync(ParticipantUnit.PrimaryUser.Email);
+                var participantsToAttach = ParticipantUnit.OtherUsers.Where(p => p.User?.Email != null).ToList();
+
+                for (int i = 0; i < participantsToAttach.Count(); i++)
+                {
+                    participantsToAttach[i].User = await DBContext.Users.FindAsync(participantsToAttach[i].User.Email);
+                }
+
+                reqTour.Participants.Add(ParticipantUnit);
+
+                await DBContext.SaveChangesAsync();
+
+                ParticipantUnit.HotelsOrders = orders;
+                foreach (var order in ParticipantUnit.HotelsOrders)
+                {
+                    var hotelOffer = order.HotelsOffer;
+                    order.HotelsOffer = null;
+
+                    await DBContext.AddAsync(order);
+                    await DBContext.SaveChangesAsync();
+
+                    order.HotelsOffer = hotelOffer;
+
+                    var Room = hotelOffer.Room;
+                    var PolicyDetails = hotelOffer.PolicyDetails;
+
+                    hotelOffer.Room = null;
+                    hotelOffer.PolicyDetails = null;
+
+                    await DBContext.AddAsync(hotelOffer);
+                    await DBContext.SaveChangesAsync();
+
+                    if (Room != null)
+                    {
+                        hotelOffer.Room = Room;
+                        hotelOffer.Room.OfferId = hotelOffer.OfferId;
+                        await DBContext.AddAsync(hotelOffer.Room);
+                    }
+
+                    if (PolicyDetails != null)
+                    {
+                        hotelOffer.PolicyDetails = PolicyDetails;
+                        hotelOffer.PolicyDetails.OfferId = hotelOffer.OfferId;
+                        var Guarantee = hotelOffer.PolicyDetails.Guarantee;
+                        var Deposit = hotelOffer.PolicyDetails.Deposit;
+                        var Prepay = hotelOffer.PolicyDetails.Prepay;
+                        var HoldTime = hotelOffer.PolicyDetails.HoldTime;
+
+                        hotelOffer.PolicyDetails.Guarantee = null;
+                        hotelOffer.PolicyDetails.Deposit = null;
+                        hotelOffer.PolicyDetails.Prepay = null;
+                        hotelOffer.PolicyDetails.HoldTime = null;
+
+                        await DBContext.AddAsync(hotelOffer.PolicyDetails);
+                        await DBContext.SaveChangesAsync();
+                        hotelOffer.PolicyDetails = await DBContext.PolicyDetails.FirstOrDefaultAsync(pd => pd.OfferId == hotelOffer.OfferId);
+
+                        if (hotelOffer.PolicyDetails != null)
+                        {
+                            hotelOffer.PolicyDetails.Guarantee = Guarantee;
+                            if (hotelOffer.PolicyDetails?.Guarantee != null)
+                                hotelOffer.PolicyDetails.Guarantee.PolicyDetailsId = hotelOffer.PolicyDetails.PolicyDetailsId;
+
+                            hotelOffer.PolicyDetails.Deposit = Deposit;
+                            if (hotelOffer.PolicyDetails?.Deposit != null)
+                                hotelOffer.PolicyDetails.Deposit.PolicyDetailsId = hotelOffer.PolicyDetails.PolicyDetailsId;
+
+                            hotelOffer.PolicyDetails.Prepay = Prepay;
+                            if (hotelOffer.PolicyDetails?.Prepay != null)
+                                hotelOffer.PolicyDetails.Prepay.PolicyDetailsId = hotelOffer.PolicyDetails.PolicyDetailsId;
+
+                            hotelOffer.PolicyDetails.HoldTime = HoldTime;
+                            if (hotelOffer.PolicyDetails?.HoldTime != null)
+                                hotelOffer.PolicyDetails.HoldTime.PolicyDetailsId = hotelOffer.PolicyDetails.PolicyDetailsId;
+
+                            await DBContext.SaveChangesAsync();
+                        }
+                    }
+
+                }
+
+                await DBContext.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                responseMessage = "<h5 style=\"color: green\">You are enrolled in a tour<h5>";
+                await InvokeAsync(StateHasChanged);
+
+                BackgroundJob.Enqueue(() => SendRegisterSuccessfulEmailAsync());
+
+                NavigationManager.NavigateTo($"tour-view/{TourId}");
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                responseMessage = ex.Message;
+            }
+            finally
+            {
+                isOrdering = false;
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SendRegisterSuccessfulEmailAsync()
+    {
+        var agency = await DBContext.Agencies.Include(a => a.Managers).FirstOrDefaultAsync(a => a.AgencyId == tour.Agency.AgencyId);
+        string agencyContact = $"{agency.Email}, {string.Join(", ", agency.PhoneNumbers)}";
+
+        var signedOnTourManagers = agency.Managers.Where(m => tour.Participants.Any(p => p.PrimaryUser.Email == m.Email || ParticipantUnit.PrimaryUser.Email == m.Email)).ToList();
+
+        string price = (tour.ExtraAmount + priceWithoutHotels + hotelsOffers.Sum(ho => CurrencyConverter.Convert((double)ho.HotelOffer.PriceTotal, ho.HotelOffer.Currency, tour.Currency))).ToString("0.00");
+        List<string> managers = signedOnTourManagers.Select(m => $"{m.FirstName}: {m.Email}, {m.Phone}").ToList();
+        
+        TourRegistrationNotificationModel model = new()
+        {
+            Name = ParticipantUnit.PrimaryUser.FirstName,
+            TourName = tour.Title,
+            StartDate = tour.StartDate.Value,
+            Price = price,
+            AgencyName = agency.Name,
+            AgencyContact = agencyContact,
+            Managers = managers
+        };
+
+        await EmailSender.SendEmailAsync(ParticipantUnit.PrimaryUser.Email, "Registration for the tour is successful", "EmailTemplates/TourRegistrationNotification.cshtml", model);
+    }
+
+    private async Task CheckUser()
+    {
+        if (UserStateService.User is null)
+        {
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+        else if (UserStateService.User.Role.RoleName == "Admin")
+        {
+            responseMessage = "Administrators cannot book tours";
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(2000);
+            NavigationManager.NavigateTo("");
+        }
+        else if (!string.IsNullOrEmpty(ParticipantUnit.PrimaryUser.Email) && ParticipantUnit.PrimaryUser.Email != UserStateService.User.Email)
+            NavigationManager.NavigateTo($"tour-order/{TourId}");
+    }
+}

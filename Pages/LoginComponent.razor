@@ -1,72 +1,65 @@
-﻿@page "/login"
-@using Travel_App_Web.Models
-@using Travel_App_Web.Services
+﻿@using Models
+@using Services
 @using System.Net
 @using System.Net.Http.Json
 @inject HttpClient HttpClient
 @inject NavigationManager NavigationManager
 @inject UserStateService UserStateService
 
-<PageTitle>Log in</PageTitle>
+<style>
+    .link {
+        color: blueviolet;
+        text-decoration: underline;
+        cursor: pointer;
+        transition: color 0.3s ease;
+    }
+        .link:hover {
+            color: darkblue;
+        }
 
-<EditForm EditContext=editContext OnValidSubmit=Login>
-    <div class="card">
-        <div class="card-body" style="max-width: 300px;">
-            <h4 class="card-title">Authorization</h4>
+    .form-label {
+        font-size: 18px;
+        font-weight: 600;
+    }
+</style>
 
-            <div class="mb-3">
-                <label for="inputEmail" class="form-label">Email*</label>
-                <div>
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<EditForm EditContext=editContext OnValidSubmit=LoginAsync>
+    <div class="logreg-container" style="border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+        <div class="card">
+            <div class="card-body" style="width: 500px; padding: 30px;">
+                <div class="mb-3">
+                    <label for="inputEmail" class="form-label">Email</label>
                     <InputText @onblur="CheckFields" @bind-Value="model.Email" class="form-control" id="inputEmail" />
                     <ValidationMessage For="() => model.Email" class="text-danger" />
                 </div>
-            </div>
 
-            <div class="mb-3">
-                <label for="inputPassword" class="form-label">Password*</label>
-                <div>
+                <div class="mb-3">
+                    <label for="inputPassword" class="form-label">Password</label>
                     <InputText @onblur="CheckFields" @bind-Value="model.Password" type="password" class="form-control" id="inputPassword" />
                     <ValidationMessage For="() => model.Password" class="text-danger" />
                 </div>
+
+                <DataAnnotationsValidator />
+                <div class="mb-2" style="margin-top: 20px; width: 100%; display: inline-flex; justify-content: center; align-items: center;">
+                    <button class="primary-btn" type="Submit">
+                        Login
+                    </button>
+                    <button class="secondary-btn" @onclick="OnExit">
+                        Cancel
+                    </button>
+                </div>
+                <div style="width: 100%; display: inline-flex; justify-content: center;">
+                    <p class="text-muted" style="margin: 0;">Don't have an account yet? <a class="link" @onclick="OnRegistration">Sign up here</a>.</p>
+                </div>
             </div>
-
-            <button class="btn btn-warning" type="Submit" disabled="@(!isFormValid)">
-                Log in
-            </button>
-
-            <button class="btn btn-secondary" @onclick="OnExit">
-                Cancel
-            </button>
-
-            @if (attemptsCount > 1)
-            {
-                <div class="mt-2">
-                    <label class="text-danger">You have @attemptsCount attempts!</label>
-                </div>
-            }
-            else if (attemptsCount == 1)
-            {
-                <div class="mt-2">
-                    <label class="text-danger">You have 1 attempt!</label>
-                </div>
-            }
-            else
-            {
-                <div class="mt-2">
-                    <label class="text-success">You have no attempts!</label>
-                </div>
-            }
-            <p class="mt-3" style="max-width: 300px;">@responseMessage</p>
-
-            <DataAnnotationsValidator />
-        </div>
-
-        <div class="mt-3 card-body">
-            <p class="text-muted">Don't have an account? <a href="/" @onclick="OnRegistration">Register here</a>.</p>
         </div>
     </div>
 </EditForm>
-
 
 
 @code {
@@ -78,44 +71,57 @@
     User? user = null;
 
 
-    protected override void OnInitialized()
-    {
-        editContext = new(model);
-    }
+    protected override void OnInitialized() => editContext = new(model);
 
-    async Task Login()
+    private async Task LoginAsync()
     {
         responseMessage = string.Empty;
 
-        var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "account/auth", model);
+        // Performing a POST request for login
+        var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "account/login", model);
 
         if (response.IsSuccessStatusCode)
         {
-            responseMessage = "You have logged in successfully";
+            // If login is successful, update success message
+            responseMessage = "<h5 style=\"color: green\">You have successfully logged in<h5>";
             StateHasChanged();
+
+            // Reading user from response
             user = await response.Content.ReadFromJsonAsync<User>();
-            await Task.Delay(2000);
+
+            await Task.Delay(1000);
+
+            // Updating user state and invoking exit event
             UserStateService.Update(user);
             await OnExit.InvokeAsync();
         }
         else if (response.StatusCode == HttpStatusCode.BadRequest)
         {
+            // If response is 400 Bad Request, decrement attempts count and update error message
             attemptsCount--;
             responseMessage = await response.Content.ReadAsStringAsync();
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"You have {attemptsCount} {(attemptsCount > 1 ? "attempts" : "attempt")} left";
         }
         else
         {
+            // In other cases, update error message
             responseMessage = await response.Content.ReadAsStringAsync();
         }
 
+        // If attempts count is less than one, invalidate the form
         if (attemptsCount < 1) isFormValid = false;
 
+        // Update component state
         StateHasChanged();
     }
 
-    void CheckFields()
+    private void CheckFields()
     {
         isFormValid = editContext.Validate() && attemptsCount > 0;
+        if (attemptsCount == 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                    $"You're out of tries";
     }
 
     [Parameter] public EventCallback OnExit { get; set; }

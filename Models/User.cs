@@ -1,41 +1,72 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Innofactor.EfCoreJsonValueConverter;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Runtime.Serialization;
 using System.Security.Cryptography;
-using Microsoft.AspNetCore.Identity;
 
-namespace Travel_App_Web.Models
+namespace Models
 {
     public class User
     {
-        [Key]
-        public int Id { get; set; }
+        [Key, Required, EmailAddress, MaxLength(80), Column(TypeName = "varchar")]
+        public string Email { get; set; } = null!;
 
         [Required, MinLength(3), MaxLength(100)]
         public string FirstName { get; set; } = null!;
 
-
         [MaxLength(100)]
         public string? MiddleName { get; set; }
-
 
         [Required, MinLength(3), MaxLength(100)]
         public string LastName { get; set; } = null!;
 
-
-        [Required, EmailAddress/*, MaxLength(254), Column(TypeName = "varchar")*/]
-        public string Email { get; set; } = null!;
-
-        [Required, Phone/*, MaxLength(15), Column(TypeName = "varchar")*/]
+        [Required, Phone, MaxLength(15), Column(TypeName = "varchar")]
         public string Phone { get; set; } = null!;
 
-        [Required, MinLength(8)]
+        [Required, MaxLength(2), Column(TypeName = "varchar")]
+        public Gender Gender { get; set; }
+
+        [Required]
+        public DateTime DateOfBirth { get; set; }
+
+        [Required]
         public string PasswordHash { get; set; } = null!;
+
+        public Country? Country { get; set; }
 
         public Role Role { get; set; } = null!;
 
-        public List<Tour>? Tours { get; set; }
+        public List<Chat> Chats { get; set; } = new();
 
-        public List<Chat> Chats { get; set; } = new List<Chat>();
+        public string IPSString { get; set; } = string.Empty;
+        [NotMapped]
+        public List<string> IPS
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(IPSString))
+                    return new List<string>();
+                else
+                    return IPSString.Split(';').ToList();
+            }
+            set
+            {
+                IPSString = string.Join(";", value);
+            }
+        }
+
+        public void AddIP(string userIP)
+        {
+            var ipList = IPS;
+            ipList.Add(userIP);
+            IPS = ipList;
+        }
+        public void RemoveIP(string userIP)
+        {
+            var ipList = IPS;
+            ipList.Remove(userIP);
+            IPS = ipList;
+        }
 
         public void SetPassword(string password)
         {
@@ -57,21 +88,22 @@ namespace Travel_App_Web.Models
         }
     }
 
+    public enum Gender
+    {
+        [EnumMember(Value = "Male")]
+        ML,
+        [EnumMember(Value = "Female")]
+        FL,
+        [EnumMember(Value = "Other")]
+        OT
+    }
+
     public static class ChatListExtensions
     {
         public static void AddChat(this List<Chat> chats, Chat chat, Role userRole)
         {
-            if (userRole.RoleName == "Admin")
-            {
+            if (userRole.RoleName == "Admin" || chats.Count < 1)
                 chats.Add(chat);
-            }
-            else
-            {
-                if (chats.Count < 1)
-                {
-                    chats.Add(chat);
-                }
-            }
         }
     }
 }

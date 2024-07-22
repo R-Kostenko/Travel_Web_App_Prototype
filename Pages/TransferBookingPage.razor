@@ -1,0 +1,426 @@
+﻿@page "/transfers-booking/{TourId}"
+@using Microsoft.EntityFrameworkCore
+@using Models
+@using Services
+@using Services.Mail
+@using System.Collections.Concurrent;
+@using System.Text;
+@using System.Globalization;
+@using Travel_App_Web.Data
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject DBContext DBContext
+@inject UserStateService UserStateService
+@inject AmadeusService AmadeusService
+
+<PageTitle>Transportation booking - @tour.Title</PageTitle>
+
+<style>
+    .main-block {
+        border-radius: 30px;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        width: fit-content;
+    }
+
+    .main-subblock {
+        border-radius: 20px;
+        background-color: rgba(255, 255, 255, 0.9);
+        width: fit-content;
+    }
+
+    .order-btn {
+        font-size: 20px;
+        margin: 2px;
+        border: 2px solid transparent;
+    }
+
+    .transfer-block {
+        margin-bottom: 20px;
+        width: 100%;
+        padding: 15px 20px;
+        border: 1px solid lightgrey;
+        border-radius: 20px;
+    }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<div style="width: 100%; display: flex; justify-content: center;">
+    <div class="card main-block">
+        <div class="card-body main-subblock mb-3">
+            <h5 class="card-title" style="margin-bottom: 20px;">Transportation offers</h5>
+
+            @foreach (var to in transferOffers)
+            {
+                <div class="transfer-block">
+                    <div style="width: 100%; display: inline-flex; justify-content: space-between; align-content: center;">
+                        <h6 style="margin: 0;">@to.Key.ToLongTimeString()</h6>
+                        @if (to.Value != null)
+                        {
+                            <h6 style="margin: 0;">@to.Value.StartDate - @to.Value.EndDate</h6>
+                            <h6 style="margin: 0;">@to.Value.PriceAmount @to.Value.Currency</h6>
+                        }
+                    </div>
+
+                    @if (to.Value == null)
+                    {
+                        indexes.TryAdd(to.Key, 0);
+
+                        <div style="position: relative; width: 100%; padding: 0 40px; border-top: 1px dashed lightgrey">
+                            @if (transferPropositions[to.Key] is null)
+                            {
+                                <div style="width: 100%; display: inline-flex; justify-content: center; margin-top: 1rem;">
+                                    <img src="/icons/plane.gif" alt="Loading..." />
+                                </div>
+                            }
+                            else if (transferPropositions[to.Key].Count > 0)
+                            {
+                                <div style="width: 100%; display: inline-flex;">
+                                    <h6 style="font-size: smaller; color: gray;">
+                                        @(indexes[to.Key] + 1)@(indexes[to.Key] + 3 >= transferPropositions[to.Key].Count ? '-' + transferPropositions[to.Key].Count.ToString() : '-' + (indexes[to.Key] + 3).ToString()) of @transferPropositions[to.Key].Count
+                                    </h6>
+                                </div>
+
+                                @foreach (var i in Enumerable.Range(indexes[to.Key], Math.Min(3, transferPropositions[to.Key].Count - indexes[to.Key])))
+                                {
+                                    int offerIndex = i;
+
+                                    <div class="mb-3" style="width: 100%; padding: 10px; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+                                        <div style="width: 100%; display: inline-flex; justify-content: space-between; align-items: start;">
+                                            <div style="display: inline-flex;">
+                                                <img src="@transferPropositions[to.Key][offerIndex].CarIconURL" height="60">
+                                                <div style="margin-left: 10px;">
+                                                    <h6>@transferPropositions[to.Key][offerIndex].Description</h6>
+                                                    <h6 style="font-size: 14px;">@transferPropositions[to.Key][offerIndex].VehType.GetEnumMemberValue(), @transferPropositions[to.Key][offerIndex].VehCategory.GetEnumMemberValue(), @transferPropositions[to.Key][offerIndex].TranType.GetEnumMemberValue()</h6>
+                                                </div>
+                                            </div>
+                                            <div style="display: inline-flex; align-items: center;">
+                                                <img src="@transferPropositions[to.Key][offerIndex].ProviderLogoUrl" height="40">
+                                            </div>
+                                        </div>
+                                        <div style="display: inline-flex; margin: 0 10px; width: calc(100% - 20px); justify-content: space-between; align-items: end;">
+                                            <div style="text-align: center;">
+                                                <h6 style="font-size: small;">@transferPropositions[to.Key][offerIndex].StartLocation.ShortAddress</h6>
+                                                <h6 style="font-size: small;">@transferPropositions[to.Key][offerIndex].StartDate.ToString("HH:mm dd.MM")</h6>
+                                            </div>
+                                            <div>
+                                                <h6 style="font-size: small;">
+                                                    @ExecuteDiferenceLambda(() =>
+                                                    {
+                                                        var difference = (transferPropositions[to.Key][offerIndex].EndDate - transferPropositions[to.Key][offerIndex].StartDate);
+                                                        return $"{(int)difference.TotalHours} hours {(int)difference.TotalMinutes % 60} minutes";
+                                                    })
+                                                </h6>
+                                            </div>
+                                            <div style="text-align: center;">
+                                                <h6 style="font-size: small;">@transferPropositions[to.Key][offerIndex].EndLocation.ShortAddress</h6>
+                                                <h6 style="font-size: small;">@transferPropositions[to.Key][offerIndex].EndDate.ToString("HH:mm dd.MM")</h6>
+                                            </div>
+                                        </div>
+                                        <div style="text-align:center; margin: 0 80px;">
+                                            <div style="width: 100%; border: 2px solid royalblue;"></div>
+                                            <h6 style="font-size: small;">@transferPropositions[to.Key][offerIndex].DistanceValue@transferPropositions[to.Key][offerIndex].DistanceUnit?.ToLower()</h6>
+                                        </div>
+                                        <div style="display: inline-flex; width: 100%; justify-content: space-between; align-items: center;">
+                                            <h6 style="font-size: 14px;">
+                                                Payment methods:
+                                                <b>@string.Join(", ", transferPropositions[to.Key][offerIndex].PaymentMethods.Select(m => m.GetEnumMemberValue()).ToList())</b>
+                                            </h6>
+                                            <h6 style="font-size: 14px;">
+                                                Price: <b>
+                                                    @transferPropositions[to.Key][offerIndex].PriceAmount@transferPropositions[to.Key][offerIndex].Currency per
+                                                    @(
+                                                        transferPropositions[to.Key][offerIndex].TranType is TransferOffer.TransferType.SHARED
+                                                        || transferPropositions[to.Key][offerIndex].TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                                                        || transferPropositions[to.Key][offerIndex].TranType is TransferOffer.TransferType.AIRPORT_BUS
+                                                        ? "person" : "vehicle"
+                                                        )
+                                                </b>
+                                            </h6>
+                                        </div>
+                                        <div style="display: inline-flex; width: 100%; justify-content: space-between; align-items: end;">
+                                            <button class="additional-btn" @onclick="() => transferOffers[to.Key] = transferPropositions[to.Key][offerIndex]">
+                                                Choose
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+
+                                <div style="display: inline-flex; position: absolute; left: 0px; top: 50%;">
+                                    <a role="button" disabled="@(indexes[to.Key] <= 0)" class="drop-button" style="transform: rotate(90deg);" @onclick="() => MovePrevious(to.Key)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalblue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+                                <div style="display: inline-flex; position: absolute; right: 0px; top: 50%;">
+                                    <a role="button" disabled="@(indexes[to.Key] + 3 >= transferPropositions[to.Key].Count)" class="drop-button" style="transform: rotate(270deg);" @onclick="() => MoveNext(to.Key)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalBlue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+                            }
+                            else
+                            {
+                                <label>No offers found</label>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <h6 for="cvv" class="form-label">CVV</h6>
+            <input id="cvv" @bind="@cvv" class="form-control" style="padding: 4px 10px; max-width: 100px;" min="100" max="1000" />
+            <button type="submit" class="primary-btn order-btn" @onclick="Order">Book</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string TourId { get; set; } = string.Empty;
+    private Tour tour = new();
+    private int cvv { get; set; } = 321;
+    private string responseMessage { get; set; } = string.Empty;
+
+    Dictionary<DateTime, TransferOffer?> transferOffers = new();
+    ConcurrentDictionary<DateTime, List<TransferOffer>?> transferPropositions = new();
+    Dictionary<DateTime, int> indexes = new();
+
+    private bool isOrdering = false;
+
+    private string ExecuteDiferenceLambda(Func<string> func) => func();
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("");
+        UserStateService.OnUserUpdate += (user) => CheckUser();
+
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+
+            long tourId = Convert.ToInt64(TourId);
+
+            var requestedTour = await DBContext.Tours
+                                            .Include(t => t.Agency)
+                                            .ThenInclude(a => a.Managers)
+                                            .Include(t => t.Agency)
+                                            .ThenInclude(a => a.CreditCard)
+                                            .Include(t => t.Program)
+                                            .Include(t => t.Participants)
+                                            .AsSplitQuery()
+                                            .FirstOrDefaultAsync(t => t.TourId == tourId);
+            if (requestedTour != null)
+            {
+                if (DateTime.Now.AddDays(7) < requestedTour.StartDate.Value)
+                {
+                    responseMessage = "It is impossible to book transportation, the tour booking time has not yet expired.";
+                    await InvokeAsync(StateHasChanged);
+                    await Task.Delay(2000);
+                    NavigationManager.NavigateTo("");
+                }
+
+                await DBContext.Entry(requestedTour)
+                    .Collection(t => t.Participants)
+                    .LoadAsync();
+
+                foreach (var participant in requestedTour.Participants)
+                {
+                    await DBContext.Entry(participant)
+                        .Reference(p => p.PrimaryUser)
+                        .LoadAsync();
+                    await DBContext.Entry(participant)
+                        .Collection(p => p.OtherUsers)
+                        .LoadAsync();
+
+                    foreach (var other in participant.OtherUsers)
+                    {
+                        await DBContext.Entry(other)
+                            .Reference(o => o.User)
+                            .LoadAsync();
+                    }
+                }
+                
+                foreach (var trans in requestedTour.Program.Where(ac => ac.ActType == Activity.ActivityType.TRANS))
+                {
+                    if (trans is TransferOffer to)
+                    {
+                        DBContext.Entry(to).Reference(to => to.StartLocation).Load();
+                        DBContext.Entry(to).Reference(to => to.EndLocation).Load();
+                    }
+
+                    transferOffers.Add(trans.StartDate, null);
+                    transferPropositions.TryAdd(trans.StartDate, null);
+                }
+
+                DBContext.Entry(requestedTour).State = EntityState.Detached;
+                await DBContext.SaveChangesAsync();
+
+                tour = requestedTour;
+                tour.Program = tour.Program.OrderBy(ac => ac.StartDate).ToList();
+
+
+                await CheckUser();
+
+                await SearchOffers();
+            }
+            else
+                NavigationManager.NavigateTo("");
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SearchOffers()
+    {
+        int adultsNumber = 0, childrenNumber = 0;
+
+        foreach (var part in tour.Participants)
+        {
+            if (part.PrimaryUser.DateOfBirth.AddYears(16) < DateTime.Now)
+                adultsNumber++;
+            else
+                childrenNumber++;
+
+            foreach (var other in part.OtherUsers)
+            {
+                if (other.User != null)
+                {
+                    if (other.User.DateOfBirth.AddYears(16) < DateTime.Now)
+                        adultsNumber++;
+                    else
+                        childrenNumber++;
+                }
+                else
+                {
+                    if (other.DateOfBirth.Value.AddYears(16) < DateTime.Now)
+                        adultsNumber++;
+                    else
+                        childrenNumber++;
+                }
+            }
+        }
+
+        List<Task> getOffersTasks = new();
+        foreach (var offer in tour.Program.OfType<TransferOffer>())
+        {
+            getOffersTasks.Add(Task.Run(async () =>
+            {
+                var offers = await AmadeusService.GetTransferOffers(offer.StartLocation, offer.EndLocation, offer.StartDate, adultsNumber, childrenNumber);
+                transferPropositions.AddOrUpdate(offer.StartDate, offers, (date, tos) => offers);
+            }));
+        }
+
+        await Task.WhenAll(getOffersTasks);
+    }
+
+    private async Task Order()
+    {
+        await CheckUser();
+
+        if (tour.Program.Sum(a => a.ActType == Activity.ActivityType.TRANS ? 1 : 0) != transferOffers.Count)
+        {
+            responseMessage = "Check the completeness of the transfer list";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        try
+        {
+            isOrdering = true;
+            await InvokeAsync(StateHasChanged);
+
+            var passengers = tour.Participants.SelectMany(pu =>
+            {
+                List<User> users = new()
+                {
+                    pu.PrimaryUser
+                };
+                foreach (var part in pu.OtherUsers)
+                {
+                    if (part.User != null)
+                        users.Add(part.User);
+                    else
+                    {
+                        users.Add(new()
+                            {
+                                Email = part.Email,
+                                FirstName = part.FirstName,
+                                LastName = part.LastName,
+                                DateOfBirth = part.DateOfBirth.Value,
+                                Gender = part.Gender.Value,
+                                MiddleName = part.MiddleName,
+                                Phone = part.Phone
+                            });
+                    }
+                }
+                return users;
+            }).ToList();
+
+            foreach (var offer in transferOffers.Values)
+            {
+                tour.TransferOrders.Add(await AmadeusService.GetTransferOrders(offer, passengers, tour.Agency.CreditCard, tour.Agency.Name, cvv));
+            }
+
+            await DBContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+            foreach (var order in tour.TransferOrders)
+            {
+                await AmadeusService.CancelTransferOrders(order.OrderId, order.Reference);
+            }
+        }
+        finally
+        {
+            isOrdering = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void MoveNext(DateTime dateTime)
+    {
+        indexes[dateTime] += 3;
+        if (indexes[dateTime] >= transferPropositions[dateTime].Count)
+            indexes[dateTime] = transferPropositions[dateTime].Count - 1;
+    }
+    private void MovePrevious(DateTime dateTime)
+    {
+        indexes[dateTime] -= 3;
+        if (indexes[dateTime] < 0)
+            indexes[dateTime] = 0;
+    }
+
+    private async Task CheckUser()
+    {
+        if (UserStateService.User is null)
+        {
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+        else if  (UserStateService.User.Role.RoleName != "Manager" || !tour.Agency.Managers.Any(m => m.Email == UserStateService.User.Email))
+        {
+            responseMessage = "You are not allowed to access this page";
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(2000);
+            NavigationManager.NavigateTo("");
+        }
+    }
+}

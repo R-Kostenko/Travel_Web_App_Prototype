@@ -1,125 +1,61 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Innofactor.EfCoreJsonValueConverter;
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Travel_App_Web.Models
+namespace Models
 {
     public class Tour
     {
         [Key]
-        public int Id { get; set; }
+        public long TourId { get; set; }
 
-        [Required]
-        public string Title { get; set; }
-
-        [Required]
-        public string Description { get; set; }
-
-        [Required]
-        public DateTime StartDate { get; set; }
-
-        [Required]
-        public DateTime EndDate { get; set; }
-
-        public string ImagePath { get; set; } = null!;
-
-        public List<User>? Users { get; set; } = null!;
-
-        public List<City> Cities { get; set; } = null!;
-
-        public List<Apartment> Prices { get; set; } = null!;
-
-        public List<Option>? Included { get; set; }
-
-        public List<Option>? NotIncluded { get; set; }
-
-        public List<DayOfTour> Days { get; set; } = null!;
-
-        public Hotel Hotel { get; set; } = null!;
-
-        public Bus Bus { get; set; } = null!;
-    }
-
-    public class City
-    {
-        [Key]
-        public int Id { get; set; }
-
-        [Required]
-        public string Name { get; set; } = null!;
-
-        public string? Country { get; set; }
-
-        [JsonIgnore]
-        public List<Tour>? Tours { get; set; }
-    }
-
-    [Owned]
-    public class Apartment
-    {
-        public string ApartmentType { get; set; } = null!;
-
-        public decimal PriceEUR { get; set; }
-    }
-
-    [Owned]
-    public class Option
-    {
-        public string Content { get; set; } = null!;
-    }
-
-    
-    public class DayOfTour
-    {
-        [Key]
-        public int Id { get; set; }
-
-        [Required]
-        public int Number { get; set; }
-
-        [Required]
+        [Required, MaxLength(150)]
         public string Title { get; set; } = null!;
 
         [Required]
         public string Description { get; set; } = null!;
 
-        public List<Image>? Images { get; set; } = null!;
-    }
-
-    public class Image
-    {
-        [Key]
-        public int Id { get; set; }
-
-        public string? Name { get; set; }
+        [Required]
+        public TourAgency? Agency { get; set; }
 
         [Required]
-        public string Path { get; set; } = null!;
-    }
+        public DateTime? StartDate { get; set; }
 
-    public class Hotel
-    {
-        [Key]
-        public int Id { get; set; }
+        public DateTime? EndDate { get; set; }
 
-        public string Description { get; set; } = null!;
+        [MaxLength(30), Column(TypeName = "varchar")]
+        public string AmountRange { get; set; } = string.Empty;
 
-        public List<Image>? Images { get; set; } = null!;
+        public double ExtraAmount { get; set; } = 0;
 
-        [JsonIgnore]
-        public List<Tour>? Tours { get; set; }
-    }
+        [Required, MaxLength(4), Column(TypeName = "varchar")]
+        public string Currency { get; set; } = "USD";
 
-    public class Bus
-    {
-        [Key]
-        public int Id { get; set; }
+        public string ImagePath { get; set; } = null!;
 
-        public string Description { get; set; } = null!;
+        public int ParticipantsMaxNumber { get; set; } = 1;
 
-        public List<Image>? Images { get; set; }
+        public List<ParticipantUnit> Participants { get; set; } = new();
 
-        [JsonIgnore]
-        public List<Tour>? Tours { get; set; }
+        public List<City> Cities { get; set; } = new();
+
+        [JsonField, MaxLength(400)]
+        public List<string> Included { get; set; } = new();
+
+        [JsonField, MaxLength(400)]
+        public List<string> NotIncluded { get; set; } = new();
+
+        [JsonField, MaxLength(600)]
+        public Dictionary<string, string> DayTitles { get; set; } = new();
+
+        public List<Activity> Program { get; set; } = new();
+
+        public List<Hotel> Hotels { get; set; } = new();
+
+        public List<HotelsOffer> HotelsOffers { get; set; } = new();
+        public List<TransferOrder> TransferOrders { get; set; } = new();
+
+        [JsonField]
+        public List<string> ScheduledTasksIds { get; set; } = new();
     }
 }

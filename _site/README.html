@@ -1,0 +1,140 @@
+﻿<!DOCTYPE html>
+<!--[if IE]><![endif]-->
+<html>
+  
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Travel_App_Web </title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="title" content="Travel_App_Web ">
+    <meta name="generator" content="docfx 2.41.0.0">
+    
+    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="stylesheet" href="styles/docfx.vendor.css">
+    <link rel="stylesheet" href="styles/docfx.css">
+    <link rel="stylesheet" href="styles/main.css">
+    <meta property="docfx:navrel" content="toc.html">
+    <meta property="docfx:tocrel" content="toc.html">
+    
+    
+    
+  </head>
+  <body data-spy="scroll" data-target="#affix" data-offset="120">
+    <div id="wrapper">
+      <header>
+        
+        <nav id="autocollapse" class="navbar navbar-inverse ng-scope" role="navigation">
+          <div class="container">
+            <div class="navbar-header">
+              <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+              </button>
+              
+              <a class="navbar-brand" href="index.html">
+                <img id="logo" class="svg" src="logo.svg" alt="">
+              </a>
+            </div>
+            <div class="collapse navbar-collapse" id="navbar">
+              <form class="navbar-form navbar-right" role="search" id="search">
+                <div class="form-group">
+                  <input type="text" class="form-control" id="search-query" placeholder="Search" autocomplete="off">
+                </div>
+              </form>
+            </div>
+          </div>
+        </nav>
+        
+        <div class="subnav navbar navbar-default">
+          <div class="container hide-when-search" id="breadcrumb">
+            <ul class="breadcrumb">
+              <li></li>
+            </ul>
+          </div>
+        </div>
+      </header>
+      <div role="main" class="container body-content hide-when-search">
+        <div class="article row grid">
+          <div class="col-md-10">
+            <article class="content wrap" id="_content" data-uid="">
+<h1 id="travel_app_web">Travel_App_Web</h1>
+
+<p>This is a logical continuation of the previous pet-project in which I get trained in new technologies and gain experience in developing ASP.NET projects.</p>
+<p>As you might have noticed in the repository name, this is a prototype of my project, which is far from complete. I didn't spend a lot of time on the design of the site, but I will do it closer to the logical completion of the project.</p>
+<h2 id="short-description">Short description</h2>
+<p>I am creating a software system for a travel agency (it will be part of my undergraduate thesis project). This system is more oriented on comfort of work of the administrator of the tour company, namely convenience and responsiveness when creating a new tour in the automated tour designer (this convenience will be provided by third-party API services to facilitate the organization of the tour), as well as the ability of the system to independently book hotel rooms and buses for the entire tour. For the convenience of users: search for tours, communication with the administration (using the built-in chat).</p>
+<h2 id="technologies">Technologies</h2>
+<ul>
+<li>ASP.NET (Blazor)</li>
+<li>C#</li>
+<li>HTML, CSS</li>
+<li>Entity Framework</li>
+<li>MS SQL Server</li>
+<li>API controllers external API services</li>
+<li>SignalR</li>
+<li>Quartz.NET or Hangfire for scheduling automated tasks</li>
+</ul>
+<h2 id="implemented-functionality">Implemented functionality:</h2>
+<ul>
+<li>Registration, authorization and authentication</li>
+<li>Tour builder (no selection of existing hotels and buses yet)</li>
+<li>Inserting and storing tours in the database</li>
+<li>Tour preview</li>
+</ul>
+<h2 id="it-is-planned-to-implement">It is planned to implement:</h2>
+<ul>
+<li>implement the full functionality of the tour designer
+<ul>
+<li>add the ability to book a bus for a long tour (using a third-party API service)</li>
+<li>add the ability to get data on hotels of different classes in the visited cities (using third-party API service)</li>
+</ul>
+</li>
+<li>add full-fledged tour search (user location will be used)</li>
+<li>implement the ability to book a place in a tour (automatic booking of places in hotels using third-party API services)</li>
+<li>implement user support in the form of a chat with the administrator (SignalR)</li>
+<li>add a system for sending emails from the site mail to confirm user actions and regular order-related notifications</li>
+<li>implement a system for regular notifications to users (using the previous paragraph) as well as for regular updates of exchange rates and tour data (using Quartz.NET or Hangfire)</li>
+<li>implement a multicultural interface</li>
+</ul>
+</article>
+          </div>
+          
+          <div class="hidden-sm col-md-2" role="complementary">
+            <div class="sideaffix">
+              <div class="contribution">
+                <ul class="nav">
+                  <li>
+                    <a href="https://github.com/R-Kostenko/Travel_Web_App_Prototype/blob/master/README.md/#L1" class="contribution-link">Improve this Doc</a>
+                  </li>
+                </ul>
+              </div>
+              <nav class="bs-docs-sidebar hidden-print hidden-xs hidden-sm affix" id="affix">
+              <!-- <p><a class="back-to-top" href="#top">Back to top</a><p> -->
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <footer>
+        <div class="grad-bottom"></div>
+        <div class="footer">
+          <div class="container">
+            <span class="pull-right">
+              <a href="#top">Back to top</a>
+            </span>
+            
+            <span>Generated by <strong>DocFX</strong></span>
+          </div>
+        </div>
+      </footer>
+    </div>
+    
+    <script type="text/javascript" src="styles/docfx.vendor.js"></script>
+    <script type="text/javascript" src="styles/docfx.js"></script>
+    <script type="text/javascript" src="styles/main.js"></script>
+  </body>
+</html>

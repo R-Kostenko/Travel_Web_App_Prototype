@@ -1,0 +1,30 @@
+﻿@using Services.Mail
+@model BookingRequestNotificationModel
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Make a Booking</title>
+    </head>
+    <body>
+        <h2>Welcome, @Model.Name!</h2>
+        <p>Your tour "@Model.TourName" will start soon, on @(Model.StartDate.ToShortDateString()).</p>
+        <p>
+            Please proceed with booking tour activities:
+            @if (Model.TransferBookingLink != null)
+            {
+                <br />
+
+                <a href="@Model.TransferBookingLink">Link for transport booking.</a>
+            }
+            @foreach (var side in Model.SidesLinks)
+            {
+                <br />
+
+                <a href="@side.Link">@side.SideName</a>
+            }
+        </p>
+    </body>
+</html>

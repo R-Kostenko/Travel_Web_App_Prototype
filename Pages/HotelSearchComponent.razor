@@ -1,0 +1,1014 @@
+﻿@using GoogleApi.Entities.Common.Enums;
+@using Models;
+@using Newtonsoft.Json;
+@using System.Runtime.Serialization;
+@using Services;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+<style>
+    .component-header {
+        display: inline-flex;
+        justify-content: space-between;
+        width: 100%;
+        border-bottom: 1px dashed aqua;
+        align-items: center;
+        padding: 8px;
+        margin-bottom: 0px;
+    }
+
+        .component-header h5 {
+            margin: 0;
+        }
+
+    .drop-button {
+        text-decoration: none;
+        margin: -5px;
+    }
+
+    .flipped {
+        transform: rotate(180deg);
+    }
+
+    .country-card {
+        display: inline-flex;
+        border-radius: 10px;
+        background-color: lightgray;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        align-items: center;
+        font-size: 18px;
+    }
+
+    .form-row {
+        display: inline-flex;
+        width: 100%;
+        height: 30px;
+        align-items: baseline;
+        margin-bottom: 12px;
+    }
+
+        .form-row h6 {
+            min-width: fit-content;
+            margin-right: 5px;
+        }
+
+        .form-row input {
+            width: fit-content;
+            font-size: 16px;
+            padding: 3px 5px;
+            margin-right: 5px;
+        }
+
+        .form-row select {
+            width: fit-content;
+            font-size: 16px;
+            padding: 3px 5px;
+            margin-right: 5px;
+        }
+
+        .form-row button {
+            height: 100%;
+            padding: 1%;
+        }
+</style>
+
+<div class="overlay">
+    <div class="logreg-container">
+        @if (!string.IsNullOrEmpty(checkMessage))
+        {
+            <Notification ResponseMessage="@checkMessage" OnClose="() => checkMessage = string.Empty" />
+        }
+
+        <div class="card">
+            <div class="card-body" style="width: 500px;">
+                <h4 class="card-title">Hotel Search</h4>
+
+                @if (showAdditionalComponents)
+                {
+                    <div role="button" class="component-header" @onclick="() => 
+                        { 
+                            showSearchParams = !showSearchParams; showSearchResults = false; showHotelView = false; 
+                        }">
+                        <h5 class="form-label">Search parameters</h5>
+                        <a class="drop-button @(showSearchParams ? " flipped" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                            </svg>
+                        </a>
+                    </div>
+                }
+
+                @if (showSearchParams)
+                {
+                    <div class="mb-3" style="display: inline-flex; width: 100%;">
+                        <div style="width: 50%;">
+                            <h6 for="countries" class="form-label" style="margin-right: 10px;">Country*:</h6>
+                            <CountryComponent Country="@country" ResponseMessage="@checkMessage" OnUpdate="UpdateCountry" />
+                        </div>
+
+                        <div style="width: 50%;">
+                            <h6 for="city" class="form-label" style="margin-right: 10px;">City*:</h6>
+                            @if (country is null)
+                            {
+                                <label style="font-size: 80%;">Оберіть країну</label>
+                            }
+                            else if (city != null)
+                            {
+                                <div id="city" class="country-card">
+                                    <label style="margin-left: 5px;">@city.Name</label>
+                                    <button type="button" class="btn-close text-white" aria-label="Close" @onclick="() => city = null"></button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="display: inline-flex;align-items: baseline;">
+                                    <input id="city" @bind="SelectedCity" class="form-control" list="cityList" placeholder="English city name" style="margin-top: 5px;max-width: 80%;margin-right: 5px;" />
+                                    <datalist id="cityList">
+                                        @foreach (var city in filteredCities)
+                                        {
+                                            <option value="@city.Name">@city.Name</option>
+                                        }
+                                    </datalist>
+                                    <button type="button" class="btn btn-primary" style="margin-top: 5px; border-radius: 20px;" @onclick="AddCityAsync">&#10003;</button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-3 form-row" style="display: inline-flex; align-items: baseline;">
+                        <h6 for="radius" class="form-label">Radius*:</h6>
+                        <InputNumber id="radius" @bind-Value="Radius" class="form-control" style="padding: 3px 5px;max-width: 60px;" min="1" max="30" />
+                        <select @bind="unit" class="form-select" style="padding: 3px 20px 3px 5px;">
+                            @foreach (var unit in Enum.GetValues(typeof(DistanceUnit)))
+                            {
+                                var enumValue = (DistanceUnit)unit;
+                                <option value="@enumValue">@enumValue.ToString().ToLower()</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3" style="display: inline-flex;">
+                        <div>
+                            <h6 for="startDate" class="form-label">Check-in date*:</h6>
+                            <InputDate id="startDate" @bind-Value="StartDate" class="form-control" min="@StartDate" />
+                        </div>
+                        <div style="margin-left: 20px;">
+                            <h6 for="endDate" class="form-label">Check-out date:</h6>
+                            <InputDate id="endDate" @bind-Value="EndDate" class="form-control" min="@StartDate.AddDays(1)" max="@(EndDate != null ? EndDate.Value : StartDate.AddDays(20))"/>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 for="rating" class="form-label">Rating:</h6>
+
+                            <div class="d-flex flex-row">
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    int rating = i;
+                                    <div class="form-check me-2">
+                                        <label class="form-check-label" for="@($"rating{i}")">@i</label>
+                                        <input type="checkbox" class="form-check-input" id="@($"rating{i}")" name="rating" value="@i"
+                                           @onchange="@(() => OnRatingsChange(rating))">
+                                    </div>
+                                }
+                            </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div role="button" style="display: inline-flex; justify-content: space-between; width: 100%;" @onclick="() => showAmenities = !showAmenities">
+                            <h6 class="form-label">Amenities:</h6>
+                            <a class="drop-button @(showAmenities ? " flipped" : "")">
+                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                </svg>
+                            </a>
+                        </div>
+
+                        @if (showAmenities)
+                        {
+                            <div style="display: inline-flex; flex-wrap: wrap;">
+                                @foreach (var amenity in Enum.GetValues(typeof(Amenity)))
+                                {
+                                    var enumValue = (Amenity)amenity;
+                                    <div style="margin-right: 10px;">
+                                        <label style="font-size: 80%;" class="form-check-label">@enumValue.GetEnumMemberValue()</label>
+                                        <input type="checkbox" class="form-check-input" name="amenity" value="@enumValue"
+                                            @onchange="@(() => OnAmenitiesChange(enumValue))">
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="mb-3 form-row" style="display: inline-flex; align-items: baseline;">
+                        <h6 for="rooms" class="form-label">Number of rooms:</h6>
+                        <InputNumber id="rooms" @bind-Value="RoomQuantity" class="form-control" style="padding: 3px 5px;max-width: 60px;" min="1" max="9" />
+                    </div>
+
+                    <div class="mb-3 form-row" style="display: inline-flex; align-items: baseline;">
+                        <h6 for="lang" class="form-label">Language:</h6>
+                        @if (TourBuilder.Tour.Agency?.Country?.Languages != null && TourBuilder.Tour.Agency.Country.Languages.Any())
+                        {
+                            <select id="autocollapse" class="form-select" @bind="language">
+                                @foreach (var lang in Enum.GetValues(typeof(Language)))
+                                {
+                                    var enumValue = (Language)lang;
+                                    <option value="@enumValue">@enumValue.ToString()</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <label style="font-size: 80%;">Select the agency country</label>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <button class="additional-btn" @onclick="async () => await SearchAsync()">
+                            Search
+                        </button>
+                    </div>
+                }
+
+                @if (showAdditionalComponents)
+                {
+                    <div role="button" class="component-header" @onclick="() => 
+                        { 
+                            showSearchResults = !showSearchResults; showSearchParams = false; showHotelView = false; 
+                        }">
+                        <h5 class="form-label">Search results</h5>
+                        <a class="drop-button @(showSearchResults ? " flipped" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                            </svg>
+                        </a>
+                    </div>
+
+                    @if (showSearchResults)
+                    {
+                        <div class="mb-3" style="position: relative; margin-top: 10px; width: 100%; display: inline-flex; justify-content: center;">
+                            @if (searchLoading)
+                            {
+                                <img src="/icons/plane.gif" alt="Loading..." />
+                            }
+                            else if (hotels.Count > 0)
+                            {
+                                <h6 style="position: absolute; right: 25px; font-size: smaller; color: darkcyan;">
+                                    @($"{hotelIndex + 1} of {hotels.Count}")
+                                </h6>
+                                <div style="display: inline-flex; position: absolute; left: -17px; top: 50%;">
+                                    <a role="button" class="drop-button" style="transform: rotate(90deg);" @onclick="() => {
+                                        if (hotelIndex - 1 < 0) {
+                                            hotelIndex = hotels.Count - 1;
+                                        }
+                                        else{
+                                            hotelIndex--;
+                                        }
+                                    }">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="40" height="40" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+                                <div role="button" style="width: 95%; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); margin-top: 30px;"
+                                        @onclick="() => ViewHotel(hotels[hotelIndex])">
+                                    @if (hotels[hotelIndex].Location.ImagesPaths.Count > 0)
+                                    {
+                                        <div style="height: 200px; width: 100%; border-top-left-radius: 10px; border-top-right-radius: 10px; 
+                                            text-align: center; background-color: black; overflow: hidden;">
+                                            <img src="@hotels[hotelIndex].Location.ImagesPaths[0]" class="card-img-top" alt="Hotel image" style="border-radius: 0px; padding-top: 0px; height: 100%; width: auto;">
+                                        </div>
+                                    }
+                                    <div style="width: 100%; padding: 5px;">
+                                        <h6>@hotels[hotelIndex].Name</h6>
+                                        <h6>Rating: @hotels[hotelIndex].Rating.Value.ToString()</h6>
+                                        <h6>Propositions:</h6>
+                                        <table style="width: 95%; margin: 5px;">
+                                            <thead>
+                                                <tr>
+                                                    <th>For</th>
+                                                    <th>Type</th>
+                                                    <th>Price</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var offer in hotelsOffers[hotels[hotelIndex].HotelId])
+                                                {
+                                                    <tr>
+                                                        <td><h6 style="font-size: small;">@($"{offer.AdultsQuantity} ({offer.RoomQuantity} rooms)")</h6></td>
+                                                        <td><h6 style="font-size: small;">@offer.Room.Category?.Replace('_', ' '), @offer.Room.Beds beds</h6></td>
+                                                        <td><h6 style="font-size: small;">@($"{offer.PriceTotal}{offer.Currency}")</h6></td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div style="display: inline-flex; position: absolute; right: -17px; top: 50%;">
+                                    <a role="button" class="drop-button" style="transform: rotate(270deg);" @onclick="() => {
+                                            if (hotelIndex + 1 >= hotels.Count) {
+                                                hotelIndex = 0;
+                                            }
+                                            else{
+                                                hotelIndex++;
+                                            }
+                                        }">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="40" height="40" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+                            }
+                            else
+                            {
+                                <label>No hotels were found</label>
+                            }
+                        </div>
+                    }
+                }
+
+                @if (hotelToLookAt != null)
+                {
+                    <div role="button" class="component-header" @onclick="() => 
+                        { 
+                            showHotelView = !showHotelView; showSearchParams = false; showSearchResults = false; 
+                        }">
+                        <h5 class="form-label">View hotel</h5>
+                        <a class="drop-button @(showHotelView ? " flipped" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                            </svg>
+                        </a>
+                    </div>
+
+                    @if (showHotelView)
+                    {
+                        <div class="mb-3" style="width: 100%; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); margin-top: 10px;">
+                            @if (hotelToLookAt.Location.ImagesPaths.Count > 0)
+                            {
+                                <div style="position: relative; height: fit-content; max-height: 300px; width: 100%; border-top-left-radius: 10px; border-top-right-radius: 10px;
+                                    overflow: hidden; text-align: center; background-color: black;">
+                                    <img src="@hotelToLookAt.Location.ImagesPaths[hotelPhotoIndex]" class="card-img-top" alt="Hotel image" style="border-radius: 0px;
+                                        padding-top: 0px; max-height: 100%; width: auto; max-width: 100%;">
+                                    <div style="display: inline-flex; position: absolute; left: 5px; top: 50%;">
+                                        <a role="button" class="drop-button" style="transform: rotate(90deg);" @onclick="() => {
+                                            if (hotelPhotoIndex - 1 < 0) {
+                                                hotelPhotoIndex = hotelToLookAt.Location.ImagesPaths.Count - 1;
+                                            }
+                                            else{
+                                                hotelPhotoIndex--;
+                                            }
+                                        }">
+                                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalblue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                            </svg>
+                                        </a>
+                                    </div>
+                                    <div style="display: inline-flex; position: absolute; right: 5px; top: 50%;">
+                                        <a role="button" class="drop-button" style="transform: rotate(270deg);" @onclick="() => {
+                                                if (hotelPhotoIndex + 1 >= hotelToLookAt.Location.ImagesPaths.Count) {
+                                                    hotelPhotoIndex = 0;
+                                                }
+                                                else{
+                                                    hotelPhotoIndex++;
+                                                }
+                                            }">
+                                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalBlue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                            </svg>
+                                        </a>
+                                    </div>
+                                </div>
+                            }
+                            <div style="width: 100%; padding: 10px;">
+                                <h6>@hotelToLookAt.Name</h6>
+                                <p><a href="@hotelToLookAt.Location.GoogleMapsUri" target="_blank" style="font-size: small;">@hotelToLookAt.Location.ShortAddress</a></p>
+                                <h6>@hotelToLookAt.Description</h6>
+
+                                <div role="@(hotelToLookAt.Sentiments != null && hotelToLookAt.Sentiments.Count > 0 ? "button" : "")" style="display: inline-flex; justify-content: space-between; width: 100%;" @onclick="() => {
+                                    if (hotelToLookAt.Sentiments != null && hotelToLookAt.Sentiments.Count > 0) 
+                                        showHotelSentiments = !showHotelSentiments;
+                                }">
+                                    <h6>Rating: @hotelToLookAt.Rating.Value.ToString() <i style="font-size: small;">(@hotelToLookAt.UserRatingCount reviews)</i></h6>
+                                    @if (hotelToLookAt.Sentiments != null && hotelToLookAt.Sentiments.Count > 0)
+                                    {                                        
+                                        <a class="drop-button @(showHotelSentiments ? " flipped" : "")">
+                                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                            </svg>
+                                        </a>
+                                    }
+                                </div>
+                                @if (hotelToLookAt.Sentiments != null && hotelToLookAt.Sentiments.Count > 0 && showHotelSentiments)
+                                {
+                                    <div style="width: 100%; display: inline-flex; flex-wrap: wrap;">
+                                        @foreach (var sentiment in hotelToLookAt.Sentiments)
+                                        {
+                                            <h6 style="margin-right: 5px; font-size: small;">@sentiment.Key: @sentiment.Value</h6>
+                                        }
+                                    </div>
+                                }
+                                <h6>Contacts: <a href="@hotelToLookAt.Contact.WebsiteUri" target="_blank" style="font-size: small;">Website</a> <i style="font-size: small;">Phone: @hotelToLookAt.Contact.PhoneNumber</i></h6>
+                                
+                                @if (hotelToLookAt.Reviews.Count > 0)
+                                {
+                                    <h6>Reviews:</h6>
+                                    <div style="width: 100%; overflow: auto; scrollbar-width: thin; max-height: 350px; margin-bottom: 10px; display: inline-flex; align-items: flex-start;">
+                                        @foreach (var review in hotelToLookAt.Reviews)
+                                        {
+                                            <div style="display: inline-block; min-width: fit-content; max-width: 100%; padding: 10px; margin: 0 5px; border: 1px dashed gray; border-radius: 10px;">
+                                                <div style="max-width: 100%; display: inline-flex; align-items: flex-start;">
+                                                    <img src="@review.PhotoUri" height="40" width="40">
+                                                    <div style="margin-left: 5px;">
+                                                        <p style="font-size: small; margin-bottom: 0px;">@review.AuthorDisplayName - @review.Rating</p>
+                                                        <p style="font-size: smaller; margin-bottom: 0px;">@review.PublishTimeDescription</p>
+                                                    </div>
+                                                </div>
+                                                <q style="display: block; font-size: small; font-style: italic; max-width: 100%;">@review.Text</q>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                <h6>Propositions:</h6>
+                                @for (int index = 0; index < hotelsOffers[hotelToLookAt.HotelId].Count; index++)
+                                {
+                                    int offerIndex = index;
+                                    offerIndexes.TryAdd(index, false);
+                                    HotelsOffer offer = hotelsOffers[hotelToLookAt.HotelId][offerIndex];
+                                    <div style="width: 95%; margin: 0 calc(2.5%); margin-bottom: 5px; border: 1px solid gray; padding: 5px; border-radius: 10px;">
+                                        <div role="button" style="display: inline-flex; justify-content: space-between; width: 100%; align-items: baseline;" @onclick="() =>
+                                            { 
+                                                offerIndexes = new(offerIndexes.Select(p => new KeyValuePair<int, bool>(p.Key, p.Key == offerIndex ? !p.Value : false)));
+                                            }">
+                                            <p style="margin: 0;"><h6 style="font-size: small;">@($"{offer.AdultsQuantity} ({offer.RoomQuantity} rooms)")</h6></p>
+                                            <p style="margin: 0;"><h6 style="font-size: small;">@offer.Room.Category?.Replace('_', ' '), @offer.Room.Beds beds</h6></p>
+                                            <p class="drop-button @(offerIndexes[offerIndex] ? " flipped" : "")">
+                                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="20" height="20" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                </svg>
+                                            </p>
+                                        </div>
+
+                                        @if (offerIndexes[offerIndex])
+                                        {
+                                            <h6 style="font-size: small; border-top: 1px dotted gray; padding-top: 5px;">
+                                                <b>@offer.CheckInDate.ToShortDateString()</b> to <b>@offer.CheckOutDate.ToShortDateString()</b>
+                                            </h6>
+                                            <h6 style="font-size: small;">@offer.Description</h6>
+                                            @if (offer.RateCode != null)
+                                            {
+                                                <h6 style="font-size: small;">Rate code: <i>@offer.RateCode?.GetEnumMemberValue()</i></h6>
+                                            }
+                                            @if (offer.Boards != null && offer.Boards?.Count > 0)
+                                            {
+                                                <h6 style="font-size: small;">Boards: <i>@string.Join(", ", offer.Boards?.Select(b => b.GetEnumMemberValue()) ?? new string[1])</i></h6>
+                                            }
+                                            <div style="border-top: 1px dotted gray; padding-top: 5px;">
+                                                <h6 style="font-size: small;"><b>Room</b></h6>
+                                                @if (!string.IsNullOrEmpty(offer.Room.Type))
+                                                {
+                                                    <h6 style="font-size: small;">Type: <i>@offer.Room.Type</i></h6>
+                                                }
+                                                @if (!string.IsNullOrEmpty(offer.Room.Category))
+                                                {
+                                                    <h6 style="font-size: small;">Category: <i>@offer.Room.Category?.Replace('_', ' ')</i></h6>
+                                                }
+                                                @if (!string.IsNullOrEmpty(offer.Room.Description))
+                                                {
+                                                    <h6 style="font-size: small;">Description: <i>@offer.Room.Description</i></h6>
+                                                }
+                                                @if (!string.IsNullOrEmpty(offer.Room.BedType) || offer.Room.Beds != null)
+                                                {
+                                                    <h6 style="font-size: small;">Beds: <i>@offer.Room.BedType?.Replace('_', ' ') (@offer.Room.Beds beds)</i></h6>
+                                                }
+                                            </div>
+                                            <div style="border-top: 1px dotted gray; padding-top: 5px;">
+                                                <h6 style="font-size: small;"><b>Policy details</b></h6>
+                                                @if (offer.PolicyDetails.Guarantee != null)
+                                                {
+                                                    <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                        <h6 style="font-size: small;">Guarantee</h6>
+                                                        @if (offer.PolicyDetails.Guarantee?.Deadline != null || offer.PolicyDetails.Guarantee?.Amount != null)
+                                                        {
+                                                            <h6 style="font-size: small;">
+                                                                Deadline:
+                                                                <i>
+                                                                    @offer.PolicyDetails.Guarantee?.Deadline?.ToString("f")
+                                                                    @(offer.PolicyDetails.Guarantee?.Amount != null ? $"({offer.PolicyDetails.Guarantee?.Amount} total)" : string.Empty)
+                                                                </i>
+                                                            </h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Guarantee?.Description != null)
+                                                        {
+                                                            <h6 style="font-size: small;">Description: <i>@offer.PolicyDetails.Guarantee?.Description</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Guarantee?.Methods != null && offer.PolicyDetails.Guarantee?.Methods?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Payment methods: <i>@string.Join(", ", offer.PolicyDetails.Guarantee?.Methods?.Select(m => m.Replace('_', ' ')) ?? new List<string>())</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Guarantee?.CreditCards != null && offer.PolicyDetails.Guarantee?.CreditCards?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Credit card vendors: <i>@string.Join(", ", offer.PolicyDetails.Guarantee?.CreditCards?.Select(v => v.GetEnumMemberValue()) ?? new List<string>())</i></h6>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (offer.PolicyDetails.Deposit != null)
+                                                {
+                                                    <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                        <h6 style="font-size: small;">Deposit</h6>
+                                                        @if (offer.PolicyDetails.Deposit?.Deadline != null || offer.PolicyDetails.Deposit?.Amount != null)
+                                                        {
+                                                            <h6 style="font-size: small;">
+                                                                Deposit:
+                                                                <i>
+                                                                    @offer.PolicyDetails.Deposit?.Deadline?.ToString("f")
+                                                                    @(offer.PolicyDetails.Deposit?.Amount != null ? $"({offer.PolicyDetails.Deposit?.Amount} total)" : string.Empty)
+                                                                </i>
+                                                            </h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Deposit?.Description != null)
+                                                        {
+                                                            <h6 style="font-size: small;">Description: <i>@offer.PolicyDetails.Deposit?.Description</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Deposit?.Methods != null && offer.PolicyDetails.Deposit?.Methods?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Payment methods: <i>@string.Join(", ", offer.PolicyDetails.Deposit?.Methods?.Select(m => m.Replace('_', ' ')) ?? new List<string>())</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Deposit?.CreditCards != null && offer.PolicyDetails.Deposit?.CreditCards?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Credit card vendors: <i>@string.Join(", ", offer.PolicyDetails.Deposit?.CreditCards?.Select(v => v.GetEnumMemberValue()) ?? new List<string>())</i></h6>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (offer.PolicyDetails.Prepay != null)
+                                                {
+                                                    <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                        <h6 style="font-size: small;">Prepay</h6>
+                                                        @if (offer.PolicyDetails.Prepay?.Deadline != null || offer.PolicyDetails.Prepay?.Amount != null)
+                                                        {
+                                                            <h6 style="font-size: small;">
+                                                                Deadline:
+                                                                <i>
+                                                                    @offer.PolicyDetails.Prepay?.Deadline?.ToString("f")
+                                                                    @(offer.PolicyDetails.Prepay?.Amount != null ? $"({offer.PolicyDetails.Prepay?.Amount} total)" : string.Empty)
+                                                                </i>
+                                                            </h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Prepay?.Description != null)
+                                                        {
+                                                            <h6 style="font-size: small;">Description: <i>@offer.PolicyDetails.Prepay?.Description</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Prepay?.Methods != null && offer.PolicyDetails.Prepay?.Methods?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Payment methods: <i>@string.Join(", ", offer.PolicyDetails.Prepay?.Methods?.Select(m => m.Replace('_', ' ')) ?? new List<string>())</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.Prepay?.CreditCards != null && offer.PolicyDetails.Prepay?.CreditCards?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Credit card vendors: <i>@string.Join(", ", offer.PolicyDetails.Prepay?.CreditCards?.Select(v => v.GetEnumMemberValue()) ?? new List<string>())</i></h6>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (offer.PolicyDetails.HoldTime != null)
+                                                {
+                                                    <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                        <h6 style="font-size: small;">HoldTime</h6>
+                                                        @if (offer.PolicyDetails.HoldTime?.Deadline != null || offer.PolicyDetails.HoldTime?.Amount != null)
+                                                        {
+                                                            <h6 style="font-size: small;">
+                                                                Deadline:
+                                                                <i>
+                                                                    @offer.PolicyDetails.HoldTime?.Deadline?.ToString("f")
+                                                                    @(offer.PolicyDetails.HoldTime?.Amount != null ? $"({offer.PolicyDetails.HoldTime?.Amount} total)" : string.Empty)
+                                                                </i>
+                                                            </h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.HoldTime?.Description != null)
+                                                        {
+                                                            <h6 style="font-size: small;">Description: <i>@offer.PolicyDetails.HoldTime?.Description</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.HoldTime?.Methods != null && offer.PolicyDetails.HoldTime?.Methods?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Payment methods: <i>@string.Join(", ", offer.PolicyDetails.HoldTime?.Methods?.Select(m => m.Replace('_', ' ')) ?? new List<string>())</i></h6>
+                                                        }
+                                                        @if (offer.PolicyDetails.HoldTime?.CreditCards != null && offer.PolicyDetails.HoldTime?.CreditCards?.Count > 0)
+                                                        {
+                                                            <h6 style="font-size: small;">Credit card vendors: <i>@string.Join(", ", offer.PolicyDetails.HoldTime?.CreditCards?.Select(v => v.GetEnumMemberValue()) ?? new List<string>())</i></h6>
+                                                        }
+                                                    </div>
+                                                }
+                                                
+                                                @if (offer.PolicyDetails.Cancellations != null 
+                                                    && offer.PolicyDetails.Cancellations?.Count > 0)
+                                                {
+                                                    <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                        <h6 style="font-size: small;">Cancellations</h6>
+                                                        @foreach (var cancellation in offer.PolicyDetails.Cancellations)
+                                                        {
+                                                            <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                                @if (!string.IsNullOrEmpty(cancellation.Type))
+                                                                {
+                                                                    <h6 style="font-size: small;">Type: <i>@cancellation.Type?.Replace('_', ' ')</i></h6>
+                                                                }
+                                                                @if (!string.IsNullOrEmpty(cancellation.Description))
+                                                                {
+                                                                    <h6 style="font-size: small;">Description: <i>@cancellation.Description</i></h6>
+                                                                }
+                                                                @if (cancellation.NumberOfNights != null)
+                                                                {
+                                                                    <h6 style="font-size: small;">Number of nights: <i>@cancellation.NumberOfNights</i></h6>
+                                                                }
+                                                                @if (cancellation.Amount != null || cancellation.Percentage != null)
+                                                                {
+                                                                    <h6 style="font-size: small;">Amount: <i>@cancellation.Amount @(cancellation.Percentage != null ? $"({cancellation.Percentage}%)" : string.Empty)</i></h6>
+                                                                }
+                                                                @if (cancellation.Deadline.HasValue)
+                                                                {
+                                                                    <h6 style="font-size: small;">Deadline: <i>@cancellation.Deadline?.ToString("f")</i></h6>
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                                @if (offer.PolicyDetails.CheckInOut != null)
+                                                {
+                                                    <div style="margin-left: 5px; border-top: 1px dotted gray; padding-top: 5px;">
+                                                        <h6 style="font-size: small;">Check in and out</h6>
+                                                        @if (!string.IsNullOrEmpty(offer.PolicyDetails.CheckInOut?.CheckIn))
+                                                        {
+                                                            <h6 style="font-size: small;">Check-in: <i>@offer.PolicyDetails.CheckInOut?.CheckIn</i></h6>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(offer.PolicyDetails.CheckInOut?.CheckInDescription))
+                                                        {
+                                                            <h6 style="font-size: small;">Check-in description: <i>@offer.PolicyDetails.CheckInOut?.CheckInDescription</i></h6>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(offer.PolicyDetails.CheckInOut?.CheckOut))
+                                                        {
+                                                            <h6 style="font-size: small;">Check-out: <i>@offer.PolicyDetails.CheckInOut?.CheckOut</i></h6>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(offer.PolicyDetails.CheckInOut?.CheckOutDescription))
+                                                        {
+                                                            <h6 style="font-size: small;">Check-out description: <i>@offer.PolicyDetails.CheckInOut?.CheckOutDescription</i></h6>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+
+                                            <h6 style="font-size: small; border-top: 1px dotted gray; padding-top: 5px;">
+                                                <b>Price:</b> 
+                                                <i>
+                                                    @offer.PriceTotal@offer.Currency
+                                                    @(!string.IsNullOrEmpty(offer.PaymentType) ? $" ({offer.PaymentType})" : string.Empty)
+                                                </i>
+                                            </h6>
+                                        }
+                                    </div>
+                                }
+
+                                <div style="width: 100%; text-align: center;">
+                                    <button class="additional-btn" @onclick="() => {
+                                        TourBuilder.AddHotel(hotelToLookAt.HotelId);
+                                        OnExit?.Invoke();
+                                    }">
+                                        Choose a hotel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+
+                <div style="width: 100%; text-align: right;">
+                    <button class="secondary-btn" style="right: 10px;" @onclick="() => OnExit?.Invoke()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private Country? country = null;
+    private City? city = null;
+    private string selectedCity = string.Empty;
+    private string SelectedCity
+    {
+        get => selectedCity;
+        set
+        {
+            selectedCity = value;
+            SearchCities();
+        }
+    }
+    private List<City> cities = new();
+    private List<City> filteredCities = new();
+
+    private Language language;
+
+    [Parameter] public TourBuilder TourBuilder { get; set; } = null!;
+    [Parameter] public DateTime StartDate { get; set; }
+    [Parameter] public DateTime? EndDate { get; set; } = null;
+
+    private List<string>? ratings = null;
+
+    private int radius = 5;
+    private int Radius
+    {
+        get => radius;
+        set
+        {
+            if (value < 1 || value > 30)
+            {
+                radius = 5;
+                StateHasChanged();
+            }
+            else
+                radius = value;
+        }
+    }
+    private DistanceUnit unit = DistanceUnit.KM;
+
+    private bool showAmenities;
+    private List<string>? amenities = null;
+
+    private int? roomQuantity = null;
+    private int? RoomQuantity
+    {
+        get => roomQuantity;
+        set
+        {
+            if (value < 1 || value > 9)
+            {
+                roomQuantity = null;
+                StateHasChanged();
+            }
+            else
+                roomQuantity = value;
+        }
+    }
+
+    private string checkMessage = string.Empty;
+
+    private bool showSearchParams = true;
+    private bool showAdditionalComponents;
+    private bool showSearchResults = true;
+    private bool searchLoading;
+    private int hotelIndex = 0;
+    private List<Hotel> hotels = new();
+    private Dictionary<string, List<HotelsOffer>> hotelsOffers = new();
+    private Hotel? hotelToLookAt = null;
+    private bool showHotelView;
+    private int hotelPhotoIndex = 0;
+    private bool showHotelSentiments;
+    private Dictionary<int, bool> offerIndexes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        string langStr = TourBuilder.Tour.Agency?.Country?.Languages?.Select(pair => pair.Value).FirstOrDefault() ?? "English";
+        language = (Language)Enum.Parse(typeof(Language), langStr);
+    }
+
+    private void UpdateCountry(Country? _country, string message)
+    {
+        country = _country;
+        checkMessage = message;
+
+        if (country != null)
+            Task.Run(async () =>
+            {
+                var citiesResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/cities/{country.CCA2}");
+                if (citiesResponse != null && citiesResponse.IsSuccessStatusCode)
+                    cities = await citiesResponse.Content.ReadFromJsonAsync<List<City>>();
+                else
+                    checkMessage = await citiesResponse.Content.ReadAsStringAsync();
+                await InvokeAsync(StateHasChanged);
+            });
+
+        StateHasChanged();
+    }
+    private void SearchCities()
+    {
+        if (string.IsNullOrEmpty(selectedCity) || selectedCity.Any(c => !char.IsAsciiLetter(c)))
+        {
+            selectedCity = string.Empty;
+            return;
+        }
+
+        filteredCities = cities.Where(c => c.Name.Contains(selectedCity, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => c.Name).ToList();
+    }
+    private async Task AddCityAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(selectedCity))
+        {
+            var chosenCity = cities.Find(c => c.Name.Equals(selectedCity));
+            if (chosenCity != null)
+            {
+                city = chosenCity;
+                city.Country = country;
+            }
+            else
+            {
+                var cityResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/add-city/{country.CCA2}-{selectedCity}");
+                if (cityResponse.IsSuccessStatusCode)
+                {
+                    string resultJson = await cityResponse.Content.ReadAsStringAsync();
+                    var result = JsonConvert.DeserializeObject<List<City>>(resultJson);
+
+                    if (result != null && result.Count == 1)
+                    {
+                        cities.Add(result[0]);
+                        city = result[0];
+                        checkMessage = string.Empty;
+                    }
+                    else if (result != null && result.Count > 1)
+                    {
+                        cities.AddRange(result);
+
+                        checkMessage = "New cities have been added to the list";
+                    }
+                    else
+                        checkMessage = "The city was not found";
+                }
+            }
+
+            selectedCity = string.Empty;
+            filteredCities.Clear();
+        }
+    }
+
+    private void OnRatingsChange(int rating)
+    {
+        ratings ??= new();
+        string ratingStr = rating.ToString();
+        if (ratings.Contains(ratingStr))
+            ratings.Remove(ratingStr);
+        else
+            ratings.Add(ratingStr);
+    }
+
+    private void OnAmenitiesChange(Amenity amenity)
+    {
+        amenities ??= new();
+        string amenityStr = amenity.ToString();
+        if (amenities.Contains(amenityStr))
+            amenities.Remove(amenityStr);
+        else
+            amenities.Add(amenityStr);
+    }
+
+    private async Task SearchAsync()
+    {
+        checkMessage = string.Empty;
+        bool manualCheck = true;
+
+        if (city is null)
+        {
+            checkMessage += (string.IsNullOrEmpty(checkMessage) ? "" : "<br>")
+                + "Select a city";
+            manualCheck = false;
+        }
+
+        if (radius < 1 || radius > 30)
+        {
+            checkMessage += (string.IsNullOrEmpty(checkMessage) ? "" : "<br>")
+                + "The radius value must be within 1-30 inclusive";
+            manualCheck = false;
+        }
+
+        if (StartDate < TourBuilder.Tour.StartDate)
+        {
+            checkMessage += (string.IsNullOrEmpty(checkMessage) ? "" : "<br>")
+                + $"The date of arrival cannot be earlier than {TourBuilder.Tour.StartDate.Value.ToShortDateString()}";
+            manualCheck = false;
+        }
+
+        if (EndDate <= StartDate)
+        {
+            checkMessage += (string.IsNullOrEmpty(checkMessage) ? "" : "<br>")
+                + $"The date of departure cannot be earlier than or equal to the date of arrival ({StartDate.ToShortDateString()})";
+            manualCheck = false;
+        }
+
+        if (roomQuantity != null && (roomQuantity < 1 || roomQuantity > 9))
+        {
+            checkMessage += (string.IsNullOrEmpty(checkMessage) ? "" : "<br>")
+                + $"The number of rooms should be between 1-9 inclusive";
+            manualCheck = false;
+        }
+
+        if (manualCheck == false) return;
+
+        showAdditionalComponents = true;
+        showSearchParams = false;
+        showSearchResults = true;
+        hotels = new();
+        hotelIndex = 0;
+        hotelToLookAt = null;
+
+        searchLoading = true;
+        StateHasChanged();
+        try
+        {
+            await TourBuilder.SetHotelsAsync(city, checkInDate: StartDate, radius, radiusUnit: unit.ToString(), amenities?.ToArray(),
+                ratings?.ToArray(), checkOutDate: EndDate, roomQuantity, language);
+            hotels = TourBuilder.Hotels.Select(pair => pair.Value).ToList();
+            hotelsOffers = TourBuilder.HotelsOffers;
+        }
+        catch (Exception ex)
+        {
+            checkMessage = $"{ex.Message}";
+        }
+        finally
+        {
+            searchLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ViewHotel(Hotel hotel)
+    {
+        hotelToLookAt = hotel;
+        showSearchParams = false;
+        showSearchResults = false;
+        showHotelView = true;
+        hotelPhotoIndex = 0;
+        showHotelSentiments = false;
+        offerIndexes = new();
+    }
+
+    [Parameter]
+    public Action OnExit { get; set; } = null!;
+
+    private enum DistanceUnit
+    {
+        KM,
+        MILE
+    }
+    private enum Amenity
+    {
+        [EnumMember(Value = "Swimming pool")]
+        SWIMMING_POOL,
+        [EnumMember(Value = "SPA")]
+        SPA,
+        [EnumMember(Value = "Fitness center")]
+        FITNESS_CENTER,
+        [EnumMember(Value = "Air conditioning")]
+        AIR_CONDITIONING,
+        [EnumMember(Value = "Restaurant")]
+        RESTAURANT,
+        [EnumMember(Value = "Parking")]
+        PARKING,
+        [EnumMember(Value = "Pets allowed")]
+        PETS_ALLOWED,
+        [EnumMember(Value = "Airport shuttle")]
+        AIRPORT_SHUTTLE,
+        [EnumMember(Value = "Business center")]
+        BUSINESS_CENTER,
+        [EnumMember(Value = "Facilities for disabled")]
+        DISABLED_FACILITIES,
+        [EnumMember(Value = "Wi-Fi")]
+        WIFI,
+        [EnumMember(Value = "Meeting rooms")]
+        MEETING_ROOMS,
+        [EnumMember(Value = "No kids allowed")]
+        NO_KID_ALLOWED,
+        [EnumMember(Value = "Tennis")]
+        TENNIS,
+        [EnumMember(Value = "Golf")]
+        GOLF,
+        [EnumMember(Value = "Kitchen")]
+        KITCHEN,
+        [EnumMember(Value = "Animal watching")]
+        ANIMAL_WATCHING,
+        [EnumMember(Value = "Beach")]
+        BEACH,
+        [EnumMember(Value = "Casino")]
+        CASINO,
+        [EnumMember(Value = "Jacuzzi")]
+        JACUZZI,
+        [EnumMember(Value = "Sauna")]
+        SAUNA,
+        [EnumMember(Value = "Solarium")]
+        SOLARIUM,
+        [EnumMember(Value = "Massage")]
+        MASSAGE,
+        [EnumMember(Value = "Valet parking")]
+        VALET_PARKING,
+        [EnumMember(Value = "Kids welcome")]
+        KIDS_WELCOME,
+        //[EnumMember(Value = "No porn films")]
+        //NO_PORN_FILMS,
+        [EnumMember(Value = "Minibar")]
+        MINIBAR,
+        [EnumMember(Value = "Television")]
+        TELEVISION,
+        [EnumMember(Value = "Room service")]
+        ROOM_SERVICE,
+        [EnumMember(Value = "Guarded parking")]
+        GUARDED_PARKING,
+        [EnumMember(Value = "Service specification menu")]
+        SERV_SPEC_MENU
+    }
+}

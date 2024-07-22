@@ -1,85 +1,166 @@
 ﻿@inherits LayoutComponentBase
-@using Travel_App_Web.Models
+@using Hangfire;
+@using Models
+@using Services
 @using Travel_App_Web.SignalR
 @inject HttpClient HttpClient
 @inject NavigationManager NavigationManager
+@inject CurrencyConverter CurrencyConverter
+@inject ScrollService ScrollService
+@inject IJSRuntime JSRuntime
 
-<PageTitle>Travel_App_Web</PageTitle>
+<PageTitle>Wanderlust Explorers</PageTitle>
 
 <style>
-    .chat-area {
-    position: fixed;
-    bottom: 90px;
-    right: 20px;
-    width: fit-content;
-    padding: 0;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    z-index: 999;
-}
+    .body {
+        /*font-family: "Sora", sans-serif;
+        font-optical-sizing: auto;
+        font-style: normal;*/
+    }
 
+    .body::before {
+        content: '';
+        background-image: url('/icons/blurry-1800136.jpg');
+        background-size: cover;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: -1;
+        opacity: 0.8;
+    }
+
+    .chat-area {
+        position: fixed;
+        bottom: 144px;
+        right: 30px;
+        width: fit-content;
+        max-width: 300px;
+        padding: 0;
+        border-radius: 10px;
+        z-index: 999;
+    }
 
     .chat-icon {
         background-color: #007bff;
         color: #fff;
         position: relative;
-        padding: 10px 20px;
-        border-radius: 5px;
+        width: fit-content;
+        height: fit-content;
+        padding: 9px 12px 6px 12px;
+        display: inline-flex;
+        font-size: 25px;
+        font-weight: 700;
+        border-radius: 25px;
         cursor: pointer;
         transition: background-color 0.3s ease;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+        align-items: center;
+        justify-content: center;
     }
         .chat-icon:hover {
             background-color: #0056b3;
         }
+
+    .currency-block {
+        width: 100%;
+        position: sticky;
+        bottom: 0px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background-color: darkslategray;
+    }
+
+        .currency-block label {
+            padding: 0;
+            margin: 5px 0;
+            color: white;
+            font-size: 16px;
+            font-weight: 500;
+        }
 </style>
 
-<div class="container-fluid d-flex flex-column min-vh-100">
-    <NavMenu />
+<div>
+    <div id="area" @onscroll="@Scroll" class="container-fluid d-flex flex-column min-vh-100" style="padding: 62px 0 0 0; height: 100vh; overflow: auto;">
+        <NavMenu />
 
-    <div class="row flex-grow-1" style="margin-bottom: 20px;">
-        <div class="col-12">
-            <main class="px-4">
-                <article class="content">
-                    @Body
-                </article>
-            </main>
-        </div>
-        <div class="chat-area">
-            @if (showChat)
-            {
-                <ChatTransitionComponent OnClose="HideChat" />
-            }
-            else
-            {
-                <div class="chat-icon" @onclick="ShowChat">Support</div>
-            }
-        </div>
-    </div>
-
-    <footer class="mt-auto py-3" style="background-color: #5E86AF; color: white; border-radius: 10px;">
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-4">
-                    <h5>Contact Information</h5>
-                    <p>Address: Your Address</p>
-                    <p>Phone: Your Phone</p>
-                    <p>Email: Your Email</p>
-                </div>
-                <div class="col-4">
-                    <h5>Working Hours</h5>
-                    <p>Monday-Friday: 9 AM - 5 PM</p>
-                    <p>Saturday: 10 AM - 2 PM</p>
-                    <p>Sunday: Closed</p>
-                </div>
-                <div class="col-4">
-                    <!-- Additional information or links -->
-                </div>
+        <div class="@*row flex-grow-1*@ body" style="max-width: 100%;">
+            <div class="col-12" style="margin-bottom: 20px;">
+                <main class="px-4">
+                    <article class="content">
+                        @Body
+                    </article>
+                </main>
+            </div>
+            <div class="chat-area" style="@(showChat ? "box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);" : string.Empty)">
+                @if (showChat)
+                {
+                    <ChatTransitionComponent OnClose="HideChat" />
+                }
+                else
+                {
+                    <div class="chat-icon" @onclick="ShowChat"><img src="/icons/icons8-чат-32.png" /></div>
+                }
             </div>
         </div>
-    </footer>
+
+        <div class="currency-block mt-auto">
+            <label>
+                USD: @Math.Round(CurrencyConverter.Convert(1, "USD", "UAH"), 2) EUR: @Math.Round(CurrencyConverter.Convert(1, "EUR", "UAH"), 2)
+            </label>
+        </div>
+        <footer class="py-3" style="background-color: midnightblue; color: white;">        
+            <div class="container-fluid">
+                <div class="row">
+                    <div class="col-4" style="display: flex; justify-content: center;">
+                        <div style="width: fit-content;">
+                            <h5>Address</h5>
+                            <p style="margin-bottom: 0;">03150, Ukraine, Kyiv</p>
+                            <p style="margin-bottom: 0;">Velyka Vasylkivska St, -1</p>
+                            <p style="margin-bottom: 0;">50.428032339, 30.516006544</p>
+                        </div>
+                    </div>
+                    <div class="col-4" style="display: flex; justify-content: center;">
+                        <div style="width: fit-content;">
+                            <h5>Contacts</h5>
+                            <p style="margin-bottom: 0;">+380 (67) 123 45 67</p>
+                            <p style="margin-bottom: 0;">+380 (63) 890 12 34</p>
+                            <p style="margin-bottom: 0;">+380 (97) 567 89 01</p>
+                            <p style="margin-bottom: 0;">+380 (432) 23 45 67</p>
+                            <p style="margin-bottom: 0;">wanderlustexplorersservice@gmail.com</p>
+                        </div>
+                    </div>
+                    <div class="col-4" style="display: flex; justify-content: center;">
+                        <div style="width: fit-content;">
+                            <h5>Working Hours</h5>
+                            <p style="margin-bottom: 0;">Mon - Fri: 9:00 - 19:00</p>
+                            <p style="margin-bottom: 0;">Sat: 10:00 - 18:00</p>
+                            <p style="margin-bottom: 0;">Sun: 10:00 - 18:00</p>
+                            <p style="margin-bottom: 0;">NO LUNCH BREAK</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
 </div>
 
+
 @code{
+    private ScrollData ScrollData = new();
     private bool showChat = false;
+
+    private async void Scroll()
+    {
+        var scroll = await JSRuntime.InvokeAsync<ScrollData>("getScrollPosition", "area");
+        if ((ScrollData.scrollPosition < 2 && scroll.scrollPosition < 2) || (ScrollData.scrollPosition >= 2 && scroll.scrollPosition >= 2))
+            return;
+
+        ScrollData = scroll;
+        ScrollService.ScrollUpdate(ScrollData);
+    }
 
     private void ShowChat()
     {

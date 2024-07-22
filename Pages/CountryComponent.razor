@@ -1,0 +1,121 @@
+﻿@using Models;
+@using Newtonsoft.Json;
+@inject HttpClient HttpClient;
+@inject NavigationManager NavigationManager;
+
+<style>
+    .country-card {
+        display: inline-flex;
+        border-radius: 10px;
+        background-color: lightgray;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        align-items: center;
+        font-size: 18px;
+        padding: 4px;
+    }
+</style>
+
+@if (Country != null)
+{
+    <div class="country-card" style="margin: 0;">
+        <img src="@Country.FlagURL" style="max-height: 20px; margin: 5px 8px;" class="img-fluid" alt="Flag Image">
+        <label style="margin-right: 10px;">@Country.Name</label>
+        <button type="button" class="btn-close text-white" aria-label="Close" @onclick="() => {Country = null; OnUpdate?.Invoke(Country, ResponseMessage);}"></button>
+    </div>
+}
+else
+{
+    <div style="display: inline-flex;align-items: center; margin: 0;">
+        <input id="countries" @bind="selectedCountry" @oninput="SearchCountries" class="form-control" list="countryList" placeholder="Country name in English" style="max-width: 80%;margin-right: 5px;" />
+        <datalist id="countryList">
+            @foreach (var country in filteredCountries)
+            {
+                <option value="@country.Item2">@country.Item2</option>
+            }
+        </datalist>
+        <button type="button" class="primary-btn" style="padding: 0; width: 38px; height: 38px;" @onclick="AddCountryAsync">
+            &#10003;
+        </button>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Country? Country { get; set; }
+    private string selectedCountry = string.Empty;
+    private List<(string, string)> countries = new();
+    private List<(string, string)> filteredCountries = new();
+    [Parameter]
+    public string ResponseMessage { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var countryResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/countries-keys-names");
+        if (countryResponse.IsSuccessStatusCode)
+        {
+            string countriesJson = await countryResponse.Content.ReadAsStringAsync();
+            countries = JsonConvert.DeserializeObject<List<(string, string)>>(countriesJson);
+        }
+    }
+    private void SearchCountries()
+    {
+        if (string.IsNullOrEmpty(selectedCountry) || selectedCountry.Any(c => !char.IsAsciiLetter(c)))
+        {
+            selectedCountry = string.Empty;
+            return;
+        }
+
+        filteredCountries = countries.Where(c => c.Item2.Contains(selectedCountry, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => c.Item2).ToList();
+    }
+    private async Task AddCountryAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(selectedCountry))
+        {
+            var countryName = countries.Find(c => c.Item2.Equals(selectedCountry));
+            if (!string.IsNullOrEmpty(countryName.Item2))
+            {
+                var countryResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/country-by-cca2/{countryName.Item1}");
+                if (countryResponse.IsSuccessStatusCode)
+                {
+                    Country = await countryResponse.Content.ReadFromJsonAsync<Country>();
+                    OnUpdate?.Invoke(Country, ResponseMessage);
+                }
+            }
+            else
+            {
+                var countryResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/add-country/{selectedCountry}");
+                if (countryResponse.IsSuccessStatusCode)
+                {
+                    string resultJson = await countryResponse.Content.ReadAsStringAsync();
+                    var result = JsonConvert.DeserializeObject<List<Country>>(resultJson);
+
+                    if (result.Count == 1)
+                    {
+                        countries.Add((result[0].CCA2, result[0].Name));
+                        Country = result.First();
+                        ResponseMessage = string.Empty;
+                        OnUpdate?.Invoke(Country, ResponseMessage);
+                    }
+                    else if (result.Count > 1)
+                    {
+                        foreach (var country in result)
+                        {
+                            countries.Add((country.CCA2, country.Name));
+                        }
+
+                        ResponseMessage = "New countries have been added to the list";
+                        OnUpdate?.Invoke(Country, ResponseMessage);
+                    }
+                }
+                else
+                    ResponseMessage = await countryResponse.Content.ReadAsStringAsync();
+            }
+
+            selectedCountry = string.Empty;
+            filteredCountries.Clear();
+        }
+    }
+
+    [Parameter] public Action<Country?, string>? OnUpdate { get; set; }
+}

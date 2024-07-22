@@ -1,7 +1,6 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using SixLabors.ImageSharp;
+﻿using Microsoft.AspNetCore.Mvc;
 using SixLabors.ImageSharp.Formats;
+using Models;
 
 namespace Travel_App_Web.Controllers
 {
@@ -12,10 +11,12 @@ namespace Travel_App_Web.Controllers
         private readonly string uploadDirectory = "wwwroot/images";
 
         [HttpPost("upload-tour-image")]
-        public async Task<ActionResult> UploadFile(IFormFile file)
+        public async Task<ActionResult> UploadFile(UploadImage uploadModel)
         {
-            if (file == null || file.Length == 0)
-                return BadRequest("Invalid file");
+            if (uploadModel == null || uploadModel.Size == 0)
+                return BadRequest("Incorrect file");
+
+            var file = uploadModel.ToFormFile();
 
             if (!IsImage(file))
             {
@@ -25,7 +26,7 @@ namespace Travel_App_Web.Controllers
             string directory = uploadDirectory + "/tour";
             var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
             var filePath = Path.Combine(directory, fileName);
-                        
+
             Directory.CreateDirectory(directory);
 
             using (var stream = new FileStream(filePath, FileMode.Create))
@@ -38,145 +39,42 @@ namespace Travel_App_Web.Controllers
             return Ok(filePath);
         }
 
-        [HttpPost("upload-{pathUnit}-images")]
-        public async Task<ActionResult<List<string>>> UploadFiles(string pathUnit)
+        [HttpGet("delete-file/{filePath}")]
+        public IActionResult DeleteFile(string filePath)
         {
-            var files = Request.Form.Files;
-            string directory;
-
-            if (files == null || files.Count == 0)
+            if (string.IsNullOrEmpty(filePath))
             {
-                return BadRequest("Invalid files");
+                return BadRequest("Incorrect file path");
             }
 
-            switch (pathUnit)
+            try
             {
-                case "days":
-                    directory = uploadDirectory + "/tour/day";
-                    break;
-                case "hotel":
-                    directory = uploadDirectory + "/hotel";
-                    break;
-                case "bus":
-                    directory = uploadDirectory + "/bus";
-                    break;
-                default:
-                    return BadRequest("Wrong API path");
-            }
+                filePath = filePath.Replace('_', '/');
+                var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", filePath.TrimStart('/'));
 
-            List<string> filePaths = new List<string>();
-
-            foreach (var file in files)
-            {
-                if (file == null || file.Length == 0 || !IsImage(file))
+                if (System.IO.File.Exists(fullPath))
                 {
-                    return BadRequest("Invalid file type.Only images are allowed.");
+                    System.IO.File.Delete(fullPath);
+                    return Ok("File successfully deleted");
                 }
-
-                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-                var filePath = Path.Combine(directory, fileName);
-
-                Directory.CreateDirectory(directory);
-
-                using (var stream = new FileStream(filePath, FileMode.Create))
+                else
                 {
-                    await file.CopyToAsync(stream);
+                    return NotFound("File not found");
                 }
-
-                filePath = filePath.Replace("wwwroot", "");
-                filePath = filePath.Replace("\\", "/");
-                filePaths.Add(filePath);
             }
-
-            return Ok(filePaths);
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error deleting the file: {ex.Message}");
+            }
         }
-
-        //[HttpPost("upload-hotel-images")]
-        //public async Task<ActionResult<List<string>>> UploadHotelFiles()
-        //{
-        //    var files = Request.Form.Files;
-
-        //    if (files == null || files.Count == 0)
-        //    {
-        //        return BadRequest("Invalid files");
-        //    }
-
-        //    List<string> filePaths = new List<string>();
-
-        //    foreach (var file in files)
-        //    {
-        //        if (file == null || file.Length == 0 || !IsImage(file))
-        //        {
-        //            return BadRequest("Invalid file type.Only images are allowed.");
-        //        }
-
-        //        string directory = uploadDirectory + "/hotel";
-        //        var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-        //        var filePath = Path.Combine(directory, fileName);
-
-        //        Directory.CreateDirectory(directory);
-
-        //        using (var stream = new FileStream(filePath, FileMode.Create))
-        //        {
-        //            await file.CopyToAsync(stream);
-        //        }
-
-        //        filePath = filePath.Replace("wwwroot", "");
-        //        filePath = filePath.Replace("\\", "/");
-        //        filePaths.Add(filePath);
-        //    }
-
-        //    return Ok(filePaths);
-        //}
-
-        //[HttpPost("upload-bus-images")]
-        //public async Task<ActionResult<List<string>>> UploadBusFiles()
-        //{
-        //    var files = Request.Form.Files;
-
-        //    if (files == null || files.Count == 0)
-        //    {
-        //        return BadRequest("Invalid files");
-        //    }
-
-        //    List<string> filePaths = new List<string>();
-
-        //    foreach (var file in files)
-        //    {
-        //        if (file == null || file.Length == 0 || !IsImage(file))
-        //        {
-        //            return BadRequest("Invalid file type.Only images are allowed.");
-        //        }
-
-        //        string directory = uploadDirectory + "/bus";
-        //        var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-        //        var filePath = Path.Combine(directory, fileName);
-
-        //        Directory.CreateDirectory(directory);
-
-        //        using (var stream = new FileStream(filePath, FileMode.Create))
-        //        {
-        //            await file.CopyToAsync(stream);
-        //        }
-
-        //        filePath = filePath.Replace("wwwroot", "");
-        //        filePath = filePath.Replace("\\", "/");
-        //        filePaths.Add(filePath);
-        //    }
-
-        //    return Ok(filePaths);
-        //}
-
 
         private bool IsImage(IFormFile file)
         {
             try
             {
-                using (var stream = file.OpenReadStream())
-                {
-                    IImageFormat imageFormat = Image.DetectFormat(stream);
-                    return imageFormat != null;
-                }
+                using var stream = file.OpenReadStream();
+                IImageFormat imageFormat = Image.DetectFormat(stream);
+                return imageFormat != null;
             }
             catch
             {

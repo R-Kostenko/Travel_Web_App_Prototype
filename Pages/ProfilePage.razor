@@ -1,0 +1,245 @@
+﻿@page "/profile"
+@using Models
+@using Services
+@using Services.Mail
+@using System.Net
+@using System.Net.Http.Json
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
+
+<style>
+    .form-container {
+        width: 100%;
+        display: inline-flex;
+    }
+
+        .form-container div:not(:first-child) {
+            margin-left: 10px;
+        }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<EditForm EditContext=editContext OnValidSubmit=UpdateAsync>
+    <div style="width: 100%; display: flex; justify-content: center; text-align: center;">
+        <div class="logreg-container" style="border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+            <div class="card">
+                <div class="card-body" style="width: 600px; padding: 30px;">
+                    <h4 class="mb-4" style="width: 100%; text-align: center;">
+                        User data updating
+                    </h4>
+
+                    <div class="mb-3 form-container">
+                        <div style="width: 49%;">
+                            <label for="inputFirstName" class="form-label">First name*</label>
+                            <InputText @bind-Value="model.FirstName" @oninput="CheckValidation" class="form-control" id="inputFirstName" placeholder="John" />
+                            <ValidationMessage For="() => model.FirstName" class="text-danger" />
+                        </div>
+                        <div style="width: 49%;">
+                            <label for="inputLastName" class="form-label">Last name*</label>
+                            <InputText @bind-Value="model.LastName" @oninput="CheckValidation" class="form-control" id="inputLastName" placeholder="Doe" />
+                            <ValidationMessage For="() => model.LastName" class="text-danger" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3 form-container">
+                        <div style="width: 49%;">
+                            <label for="inputMiddleName" class="form-label" style="font-weight: 400;">Middle name</label>
+                            <InputText @bind-Value="model.MiddleName" @oninput="CheckValidation" class="form-control" id="inputMiddleName" />
+                            <ValidationMessage For="() => model.MiddleName" class="text-danger" />
+                        </div>
+                        <div>
+                            <label for="inputGender" class="form-label">Gender*</label>
+                            <select @bind="model.Gender" @oninput="CheckValidation" class="form-select" id="inputGender">
+                                @foreach (var gender in Enum.GetValues(typeof(Gender)))
+                                {
+                                    var enumValue = (Gender)gender;
+                                    <option value="@enumValue">@enumValue.GetEnumMemberValue()</option>
+                                }
+                            </select>
+                            <ValidationMessage For="() => model.Gender" class="text-danger" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3" style="width: 100%;">
+                        <label for="inputEmail" class="form-label">Email*</label>
+                        <InputText @bind-Value="model.Email" @oninput="CheckValidation" class="form-control" id="inputEmail" placeholder="example@gmail.com" disabled="true" />
+                        <ValidationMessage For="() => model.Email" class="text-danger" />
+                    </div>
+
+                    <div class="mb-3" style="width: 100%;">
+                        <label for="inputPhone" class="form-label">Phone*</label>
+                        <InputText @bind-Value="model.Phone" @oninput="CheckValidation" class="form-control" id="inputPhone" placeholder="+380961234567" />
+                        <ValidationMessage For="() => model.Phone" class="text-danger" />
+                    </div>
+
+                    <div class="mb-3 form-container">
+                        <div>
+                            <label for="inputBirthDate" class="form-label">Date of birth*</label>
+                            <InputDate id="inputBirthDate" @bind-Value="model.DateOfBirth" @onblur="CheckValidation" class="form-control" min="@DateTime.Today.AddYears(-80).ToString("yyyy-MM-dd")" max="@DateTime.Today.AddYears(-6).ToString("yyyy-MM-dd")" />
+                            <ValidationMessage For="@(() => model.DateOfBirth)" />
+                        </div>
+                        <div>
+                            <label for="countries" class="form-label" style="width: 100%;">Country*</label>
+                            <CountryComponent Country="@model.Country" ResponseMessage="@responseMessage" OnUpdate="UpdateCountry" />
+                        </div>
+                    </div>
+
+                    <h5 style="padding: 10px 0 20px 0;">Password changing</h5>
+                    <div class="mb-3 form-container">
+                        <div style="width: 49%;">
+                            <label for="inputPassword" class="form-label">Old password*</label>
+                            <InputText @bind-Value="oldPassword" @oninput="CheckValidation" type="password" class="form-control" id="inputPassword" />
+                            <ValidationMessage For="() => model.Password" class="text-danger" />
+                        </div>
+                        <div style="width: 49%;">
+                            <label for="inputConfirmPassword" class="form-label">New password*</label>
+                            <InputText @bind-Value="newPassword" @onblur="CheckValidation" type="password" class="form-control" id="inputConfirmPassword" />
+                            <ValidationMessage For="() => model.ConfirmPassword" class="text-danger" />
+                        </div>
+                    </div>
+
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-2" style="margin-top: 20px; width: 100%; display: inline-flex; justify-content: space-around; align-items: center;">
+                        <button class="primary-btn" type="Submit">
+                            Update
+                        </button>
+                        <button class="secondary-btn" @onclick="DeleteAsync">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</EditForm>
+
+
+@code {
+    RegisterModel model = null!;
+    private string oldPassword { get; set; } = string.Empty;
+    private string newPassword { get; set; } = string.Empty;
+    private EditContext editContext = null!;
+    string responseMessage = string.Empty;
+    bool isFormValid;
+    User? user = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("");
+        UserStateService.OnUserUpdate += async (user) =>
+        {
+            await Task.Run(() =>
+            {
+                if (user is null)
+                    NavigationManager.NavigateTo("");
+            });
+        };
+
+        if (UserStateService.User is null)
+        {
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+
+        var user = UserStateService.User;
+        model = new()
+        {
+            Email = user.Email,
+            LastName = user.LastName,
+            FirstName = user.FirstName,
+            MiddleName = user.MiddleName,
+            Phone = user.Phone,
+            Country = UserStateService.UserCountry,
+            Gender = user.Gender,
+            DateOfBirth = user.DateOfBirth,
+            Password = "Unchanged@12345",
+            ConfirmPassword = "Unchanged@12345"
+        };
+        editContext = new(model);
+        isFormValid = false;
+    }
+
+    private void UpdateCountry(Country? country, string message)
+    {
+        model.Country = country;
+        responseMessage = message;
+        StateHasChanged();
+    }
+    private async Task UpdateAsync()
+    {
+        responseMessage = string.Empty;
+        if (!editContext.Validate())
+        {
+            isFormValid = false;
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(oldPassword) && oldPassword == newPassword)
+        {
+            model.Password = newPassword;
+            model.ConfirmPassword = newPassword;
+        }
+        else if (!string.IsNullOrEmpty(oldPassword) && oldPassword != newPassword)
+        {
+            responseMessage = "Passwords must match each other";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var response = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "account/update", model);
+
+        if (response.IsSuccessStatusCode)
+        {
+            responseMessage = "You have successfully updated your data";
+            await InvokeAsync(StateHasChanged);
+
+            user = await response.Content.ReadFromJsonAsync<User>();
+            user.Country = model.Country;
+
+            UserStateService.Update(user);
+        }
+        else if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            responseMessage = "An error occurred";
+        }
+
+        StateHasChanged();
+    }
+    private async Task DeleteAsync()
+    {
+        var response = await HttpClient.GetAsync(NavigationManager.BaseUri + $"account/delete/{model.Email}");
+
+        if (response.IsSuccessStatusCode)
+        {
+            responseMessage = "You deleted a profile";
+            await InvokeAsync(StateHasChanged);
+
+            UserStateService.Update(null);
+        }
+        else if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            responseMessage = "An error occurred";
+        }
+    }
+
+    private void CheckValidation()
+    {
+        isFormValid = editContext.Validate();
+        StateHasChanged();
+    }
+}

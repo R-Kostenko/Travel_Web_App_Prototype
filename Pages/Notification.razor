@@ -1,0 +1,44 @@
+﻿<style>
+    .notification {
+        position: fixed;
+        z-index: 3;
+        top: 20px;
+        left: 40%;
+        right: 40%;
+        min-width: 200px;
+        border-radius: 20px;
+        background-color: rgba(255, 255, 255, 0.8);
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+
+        .notification div {
+            position: relative;
+            padding: 5px 30px;
+        }
+
+            .notification div h6 {
+                font-size: 16px;
+                color: red;
+                margin-top: 0.5rem;
+            }
+
+            .notification div button {
+                position: absolute;
+                right: 5px;
+                top: 10px;
+            }
+</style>
+
+<div class="notification">
+    <div>
+        <h6>@((MarkupString)ResponseMessage)</h6>
+        <button type="button" class="btn-close text-white" aria-label="Close" @onclick="OnClose"></button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string ResponseMessage { get; set; }
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+}

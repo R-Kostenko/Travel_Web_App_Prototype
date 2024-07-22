@@ -1,0 +1,825 @@
+﻿@using GoogleApi.Entities.Common.Enums;
+@using GoogleApi.Entities.Places.Details.Request.Enums;
+@using Models;
+@using Newtonsoft.Json;
+@using System.Runtime.Serialization;
+@using Services;
+
+<style>
+    .tab-row {
+        display: flex;
+        overflow: hidden;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+        border-bottom: 2px solid cornflowerblue;
+    }
+
+    .tab {
+        display: flex;
+        width: 50%;
+        padding: 5px;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 18px;
+    }
+    .chosen {
+        background-color: cornflowerblue;
+        color: antiquewhite;
+    }
+
+    .component-header {
+        display: inline-flex;
+        justify-content: space-between;
+        width: 100%;
+        border-bottom: 1px dashed aqua;
+        align-items: center;
+        padding: 8px;
+        margin-bottom: 0px;
+    }
+    .component-header h5 {
+        margin: 0;
+    }
+
+    .drop-button {
+        text-decoration: none;
+        margin: -5px;
+    }
+
+    .flipped {
+        transform: rotate(180deg);
+    }
+
+    .check-row {
+        display: inline-flex;
+        width: 100%;
+        align-items: center;
+    }
+
+        .check-row input {
+            margin: 0 0 0.5rem 5px
+        }
+
+    .form-container {
+        width: 100%;
+        border-radius: 10px;
+        padding: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .form-row {
+        display: inline-flex;
+        width: 100%;
+        height: 30px;
+        align-items: baseline;
+        margin-bottom: 12px;
+    }
+
+        .form-row h6 {
+            min-width: fit-content;
+            margin-right: 5px;
+        }
+
+        .form-row input {
+            width: fit-content;
+            font-size: 16px;
+            padding: 3px 5px;
+            margin-right: 5px;
+        }
+
+        .form-row select {
+            width: fit-content;
+            font-size: 16px;
+            padding: 3px 5px;
+            margin-right: 5px;
+        }
+
+        .form-row button {
+            height: 100%;
+            padding: 1%;
+        }
+</style>
+
+<div class="overlay">
+    <div class="logreg-container">
+        @if (!string.IsNullOrEmpty(responseMessage))
+        {
+            <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+        }
+
+        <div class="card">
+            <div class="card-body" style="width: 600px;">
+                <div class="tab-row">
+                    <div role="button" class="tab@(poiChoosed? " chosen" : "")" @onclick="() => poiChoosed = true">
+                        Points of interest
+                    </div>
+                    <div role="button" class="tab@(!poiChoosed? " chosen" : "")" @onclick="() => poiChoosed = false">
+                        Local tours and events
+                    </div>
+                </div>
+
+                <div class="mb-3" style="width: 100%; padding: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); border-bottom-left-radius: 10px; border-bottom-right-radius: 10px;">
+
+                    @if (poiChoosed)
+                    {
+                        @if (showPoIAdditionalComponent)
+                        {
+                            <div role="button" class="component-header" @onclick="() => 
+                                { 
+                                    showPoISearchParams = !showPoISearchParams; showPoISearchResults = false; showChosenAct = false; 
+                                }">
+                                <h5 class="form-label">Search parameters</h5>
+                                <a class="drop-button @(showPoISearchParams ? " flipped" : "")">
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                    </svg>
+                                </a>
+                            </div>
+                        }
+
+                        @if (showPoISearchParams)
+                        {
+                            <div class="form-container" style="margin-top: 10px;">
+                                <div class="form-row">
+                                    <h6>Latitude:</h6>
+                                    <input id="latitude" @bind="Latitude" class="form-control" placeholder="30.2623" />
+                                </div>
+                                <div class="form-row">
+                                    <h6>Longitude:</h6>
+                                    <input id="longitude" @bind="Longitude" class="form-control" placeholder="2.13356" />
+                                </div>
+                                <div class="form-row">
+                                    <h6>Radius (km):</h6>
+                                    <InputNumber id="radius" @bind-Value="Radius" class="form-control" style="padding: 4px;margin-left: 5px;max-width: 60px;" min="1" max="20" />
+                                </div>
+                                <div class="form-row">
+                                    <h6 for="lang" class="form-label">Language:</h6>
+                                    <select id="autocollapse" class="form-select" @bind="poiLang" style="margin-left: 10px;">
+                                        @foreach (var lang in Enum.GetValues(typeof(Language)))
+                                        {
+                                            var enumValue = (Language)lang;
+                                            <option value="@enumValue">@enumValue.ToString()</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div role="button" style="display: inline-flex; justify-content: space-between; width: 100%;" @onclick="() => showPoISearchParamsCategories = !showPoISearchParamsCategories">
+                                    <h6 class="form-label">Categories:</h6>
+                                    <a class="drop-button @(showPoISearchParamsCategories ? " flipped" : "")">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+
+                                @if (showPoISearchParamsCategories)
+                                {
+                                    <div style="display: inline-flex; flex-wrap: wrap; margin-bottom: 5px;">
+                                        @foreach (var category in Enum.GetValues(typeof(PointOfInteres.LocationCategory)))
+                                        {
+                                            var enumValue = (PointOfInteres.LocationCategory)category;
+                                            <div style="margin-right: 10px;">
+                                                <label style="font-size: 80%;" class="form-check-label">@enumValue.GetEnumMemberValue()</label>
+                                                <input type="checkbox" class="form-check-input" name="category" value="@enumValue"
+                                                @onchange="@(() => OnCategoriesChange(enumValue))">
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                <div style="border-top: 1px dotted gray; padding-top: 5px;">
+                                    <h5>Or make a request manually</h5>
+                                    <div class="form-row">
+                                        <h6>Запит:</h6>
+                                        <input id="query" @bind="poiQuery" class="form-control" placeholder="Eiffel Tower, Paris, France" />
+                                        <button class="btn btn-warning" style="display:flex; align-items: center; height: 34.5px; border-radius: 20px;" @onclick="async () => await GetPoIManually(poiQuery)">
+                                            🔍
+                                        </button>
+                                    </div>
+                                    <div class="form-row">
+                                        <h6 for="lang" class="form-label">Language:</h6>
+                                        <select id="autocollapse" class="form-select" @bind="poiLang">
+                                            @foreach (var lang in Enum.GetValues(typeof(Language)))
+                                            {
+                                                var enumValue = (Language)lang;
+                                                <option value="@enumValue">@enumValue.ToString()</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="width: 100%; display: inline-flex; justify-content: space-around; align-items: flex-end;">
+                                    <div>
+                                        <button class="additional-btn" @onclick="async () => await GetPoIs()">
+                                            Search for POIs
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (showPoIAdditionalComponent)
+                        {
+                            <div role="button" class="component-header" @onclick="() => 
+                                { 
+                                    showPoISearchResults = !showPoISearchResults; showPoISearchParams = false; showChosenAct = false; 
+                                }">
+                                <h5 class="form-label">Results</h5>
+                                <a class="drop-button @(showPoISearchResults ? " flipped" : "")">
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                    </svg>
+                                </a>
+                            </div>
+
+                            @if (showPoISearchResults)
+                            {
+                                <div class="mb-3" style="position: relative; width: 100%; padding: 0 20px;">
+                                    @if (searchLoading)
+                                    {
+                                        <div style="width: 100%; display: inline-flex; justify-content: center; margin-top: 1rem;">
+                                            <img src="/icons/plane.gif" alt="Loading..." />
+                                        </div>
+                                    }
+                                    else if (pois != null && pois.Count > 0)
+                                    {
+                                        <div style="width: 100%; display: inline-flex;">
+                                            <h6 style="font-size: smaller; color: gray;">
+                                                @(currentPoIIndex + 1)@(currentPoIIndex + 5 >= pois.Count ? '-' + pois.Count.ToString() : '-' + (currentPoIIndex + 5).ToString()) of @pois.Count
+                                            </h6>
+                                        </div>
+
+                                        @foreach (var i in Enumerable.Range(currentPoIIndex, Math.Min(5, pois.Count - currentPoIIndex)))
+                                        {
+                                            int poiIndex = i;
+                                            <div role="button" class="mb-3" style="width: 100%; padding: 10px; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);" 
+                                                @onclick="() => { 
+                                                    chosenAct = pois[poiIndex];
+                                                    chosenAct.StartDate = StartTime;
+                                                    chosenAct.EndDate = EndTime;
+                                                    showChosenAct = true; showPoISearchParams = false; showPoISearchResults = false; 
+                                                }">
+                                            
+                                            
+                                                <div style="width: 100%; display: inline-flex;">
+                                                    <img src="@pois[poiIndex].PlaceIconUrl" height="40">
+                                                    <div style="margin-left: 10px;">
+                                                        <h6>@pois[poiIndex].Name</h6>
+                                                        <h6 style="font-size: 14px;">@pois[poiIndex].Category.GetEnumMemberValue()</h6>
+                                                    </div>
+                                                </div>
+                                                <h6 style="font-size: 14px; z-index: 1000;"><a href="@pois[poiIndex].Location.GoogleMapsUri" target="_blank">@pois[poiIndex].Location.ShortAddress</a></h6>
+                                                <h6 style="font-size: 15px;">@(pois[poiIndex].Rank != null ? $"Rank: {pois[poiIndex].Rank}" : string.Empty)</h6>
+                                                <h6 style="font-size: 14px;">
+                                                    @("Tags: " + string.Join(", ", pois[poiIndex].Tags.Select(t => '#' + t).ToList()))
+                                                </h6>
+                                            </div>
+                                        }
+
+                                        <div style="display: inline-flex; position: absolute; left: -8px; top: 50%;">
+                                            <a role="button" disabled="@(currentPoIIndex <= 0)" class="drop-button" style="transform: rotate(90deg);" @onclick="MovePrevious">
+                                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalblue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                        <div style="display: inline-flex; position: absolute; right: -8px; top: 50%;">
+                                            <a role="button" disabled="@(currentPoIIndex + 3 >= pois.Count)" class="drop-button" style="transform: rotate(270deg);" @onclick="MoveNext">
+                                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalBlue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div style="width: 100%; display: inline-flex; justify-content: center;">
+                                            <label>No points of interest found</label>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        @if (showSideAdditionalComponent)
+                        {
+                            <div role="button" class="component-header" @onclick="() => 
+                                { 
+                                    showSideSearchParams = !showSideSearchParams; showSideSearchResults = false; showChosenAct = false; 
+                                }">
+                                <h5 class="form-label">Search parameters</h5>
+                                <a class="drop-button @(showSideSearchParams ? " flipped" : "")">
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                    </svg>
+                                </a>
+                            </div>
+                        }
+
+                        @if (showSideSearchParams)
+                        {
+                            <div class="form-container" style="margin-top: 10px;">
+                                <div class="form-row">
+                                    <h6>Latitude:</h6>
+                                    <input id="latitude" @bind="Latitude" class="form-control" placeholder="30.2623" />
+                                </div>
+                                <div class="form-row">
+                                    <h6>Longitude:</h6>
+                                    <input id="longitude" @bind="Longitude" class="form-control" placeholder="2.13356" />
+                                </div>
+                                <div class="form-row">
+                                    <h6>Radius (km):</h6>
+                                    <input id="radius" @bind="Radius" class="form-control" min="1" max="20" />
+                                </div>
+                                <div style="width: 100%; display: inline-flex; justify-content: space-around; align-items: flex-end;">
+                                    <div>
+                                        <button class="additional-btn" @onclick="async () => await GetSides()">
+                                            Search for tours and activities
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (showSideAdditionalComponent)
+                        {
+                            <div role="button" class="component-header" @onclick="() => { showSideSearchResults = !showSideSearchResults; showSideSearchParams = false; showChosenAct = false; }">
+                                <h5 class="form-label">Results</h5>
+                                <a class="drop-button @(showSideSearchResults ? " flipped" : "")">
+                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                    </svg>
+                                </a>
+                            </div>
+
+                            @if (showSideSearchResults)
+                            {
+                                <div class="mb-3" style="position: relative; width: 100%; padding: 0 20px;">
+                                    @if (searchLoading)
+                                    {
+                                        <div style="width: 100%; display: inline-flex; justify-content: center; margin-top: 1rem;">
+                                            <img src="/icons/plane.gif" alt="Loading..." />
+                                        </div>
+                                    }
+                                    else if (sides != null && sides.Count > 0)
+                                    {
+                                        <div style="width: 100%; display: inline-flex;">
+                                            <h6 style="font-size: smaller; color: gray;">
+                                                @(currentSideIndex + 1)@(currentSideIndex + 5 >= sides.Count ? '-' + sides.Count.ToString() : '-' + (currentSideIndex + 5).ToString()) of @sides.Count
+                                            </h6>
+                                        </div>
+
+                                        @foreach (var i in Enumerable.Range(currentSideIndex, Math.Min(5, sides.Count - currentSideIndex)))
+                                        {
+                                            int sideIndex = i;
+                                            <div class="mb-3" style="width: 100%; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+                                                @if (sides[sideIndex].PicturesUrls.Count > 0)
+                                                {
+                                                    sideImageIndex.TryAdd(sideIndex, 0);
+                                                    <div style="position: relative; height: fit-content; max-height: 300px; width: 100%; border-top-left-radius: 10px; border-top-right-radius: 10px;
+                                                            overflow: hidden; text-align: center; background-color: black;">
+                                                        <img src="@sides[sideIndex].PicturesUrls[sideImageIndex[sideIndex]]" class="card-img-top" alt="Side image" style="border-radius: 0px;
+                                                            padding-top: 0px; max-height: 300px; width: auto; max-width: 100%;">
+                                                        @if (sides[sideIndex].PicturesUrls.Count > 1)
+                                                        {
+                                                            <div style="display: inline-flex; position: absolute; left: 5px; top: 50%;">
+                                                                <a role="button" class="drop-button" style="transform: rotate(90deg);" @onclick="() => {
+                                                                    if (sideImageIndex[sideIndex] - 1 < 0) {
+                                                                        sideImageIndex[sideIndex] = sides[sideIndex].PicturesUrls.Count - 1;
+                                                                    }
+                                                                    else{
+                                                                        sideImageIndex[sideIndex]--;
+                                                                    }
+                                                                }">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="20" height="20" fill="white" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                                    </svg>
+                                                                </a>
+                                                            </div>
+                                                            <div style="display: inline-flex; position: absolute; right: 5px; top: 50%;">
+                                                                <a role="button" class="drop-button" style="transform: rotate(270deg);" @onclick="() => {
+                                                                if (sideImageIndex[sideIndex] + 1 >= sides[sideIndex].PicturesUrls.Count) {
+                                                                    sideImageIndex[sideIndex] = 0;
+                                                                }
+                                                                else{
+                                                                    sideImageIndex[sideIndex]++;
+                                                                }
+                                                            }">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="20" height="20" fill="white" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                                    </svg>
+                                                                </a>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                }
+                                            
+                                                <div class="mb-3" style="width: 100%; padding: 10px;">
+                                                    <h6>@sides[sideIndex].Title</h6>
+                                                    @if (!string.IsNullOrEmpty(sides[sideIndex].ShortDescription))
+                                                    {
+                                                        <h6 style="font-size: small;">@((MarkupString)sides[sideIndex].ShortDescription)</h6>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(sides[sideIndex].Description))
+                                                    {
+                                                        sideDescriptionShow.TryAdd(sideIndex, false);
+                                                        <div style="width: 100%; display: inline-flex; align-items: flex-start;@(sideDescriptionShow[sideIndex] ? "" : " height: 18px; overflow: hidden;")">
+                                                            <h6 style="font-size: small; margin-right: 2px;@(sideDescriptionShow[sideIndex] ? "" : " overflow: hidden; text-overflow: ellipsis; white-space: nowrap;")">@((MarkupString)sides[sideIndex].Description)</h6>
+                                                        
+                                                            <a role="button" class="drop-button @(sideDescriptionShow[sideIndex] ? " flipped" : "")"
+                                                                @onclick="() => sideDescriptionShow[sideIndex] = !sideDescriptionShow[sideIndex]">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="20" height="20" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                                    </svg>
+                                                                </a>
+                                                        </div>
+                                                    }
+
+                                                    <div style="width: 100%; display: inline-flex; justify-content: space-around;">
+                                                        @if (sides[sideIndex].Rating != null)
+                                                        {
+                                                            <h6 style="font-size: 15px;">Rating: @sides[sideIndex].Rating</h6>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(sides[sideIndex].MinimumDuration))
+                                                        {
+                                                            <h6 style="font-size: 15px;">Duration: @sides[sideIndex].MinimumDuration</h6>
+                                                        }
+                                                    </div>
+                                                    <div style="width: 100%; display: inline-flex; justify-content: space-around;">
+                                                        <h6 style="font-size: 14px;"><a href="@sides[sideIndex].BookingLink" target="_blank">Website (booking will take place before the tour starts)</a></h6>
+                                                        <h6 style="font-size: 16px; font-weight: bold;">@(sides[sideIndex].PriceAmount + sides[sideIndex].Currency)</h6>
+                                                    </div>
+
+                                                    <div style="width: 100%; display: inline-flex; justify-content: flex-end;">
+                                                        <button class="additional-btn" style="display:flex; align-items: center;" @onclick="() => {
+                                                            chosenAct = sides[sideIndex];
+                                                            chosenAct.StartDate = StartTime;
+                                                            chosenAct.EndDate = EndTime;
+                                                            showChosenAct = true; showSideSearchParams = false; showSideSearchResults = false;
+                                                        }">
+                                                            Choose
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+
+                                        <div style="display: inline-flex; position: absolute; left: -8px; top: 50%;">
+                                            <a role="button" disabled="@(currentPoIIndex <= 0)" class="drop-button" style="transform: rotate(90deg);" @onclick="MovePrevious">
+                                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalblue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                        <div style="display: inline-flex; position: absolute; right: -8px; top: 50%;">
+                                            <a role="button" disabled="@(currentPoIIndex + 3 >= sides.Count)" class="drop-button" style="transform: rotate(270deg);" @onclick="MoveNext">
+                                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalBlue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div style="width: 100%; display: inline-flex; justify-content: center;">
+                                            <label>Тури та місцеві активності не знайдені</label>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        }
+
+                    }
+
+                    @if (chosenAct != null)
+                    {
+                        <div role="button" class="component-header" @onclick="() => 
+                            { 
+                                showChosenAct = !showChosenAct; 
+                                showPoIAdditionalComponent = true; showSideAdditionalComponent = true; 
+                                showPoISearchParams = false; showSideSearchParams = false; 
+                                showPoISearchResults = false; showSideSearchResults = false; 
+                            }">
+                            <h5 class="form-label">Selected activity</h5>
+                            <a class="drop-button @(showChosenAct ? " flipped" : "")">
+                                <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                    <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                </svg>
+                            </a>
+                        </div>
+
+                        @if (showChosenAct)
+                        {
+                            if (chosenAct != null)
+                            {
+                                <div class="form-container" style="margin-top: 10px;">
+                                    <div style="display: inline-flex; width: 100%; justify-content: space-between;">
+                                        <h6 style="font-size: small;">Activity: @(chosenAct is PointOfInteres poi ? poi.Name : chosenAct.Title)</h6>
+                                        <h6 style="font-size: small; margin-left: 5px;">Type: @chosenAct.ActType.GetEnumMemberValue()</h6>
+                                    </div>
+
+                                    <div class="form-row">
+                                        <h6>Name of the activity:</h6>
+                                        <input id="title" @bind="chosenAct.Title" class="form-control" placeholder="Visiting..." />
+                                    </div>
+
+                                    <div class="form-row">
+                                        <h6>Activity start time:</h6>
+                                        <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="chosenAct.StartDate" class="form-control" Format="yyyy-MM-dd HH:mm:ss" />
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>End time of the activity:</h6>
+                                        <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="chosenAct.EndDate" class="form-control" Format="yyyy-MM-dd HH:mm:ss" />
+                                        @if (chosenAct is TourOrSideActivity side && !string.IsNullOrEmpty(side.MinimumDuration))
+                                        {
+                                            <h6 style="font-size: small;">(minimum duration: @side.MinimumDuration)</h6>
+                                        }
+                                    </div>
+                                    <div style="width: 100%; text-align: center;">
+                                        <button class="additional-btn" style="right: 10px;" @onclick="AddActivity">
+                                            Create an activity
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="width: 100%; display: inline-flex; justify-content: center;">
+                                    <label>Activity is not selected</label>
+                                </div>
+                            }
+                        }
+                    }
+
+                </div>
+                <div style="width: 100%; text-align: right;">
+                    <button class="secondary-btn" style="right: 10px;" @onclick="OnExit">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public TourBuilder TourBuilder { get; set; } = null!;
+    [Parameter] public DateTime? MinStartTime { get; set; } = null;
+    [Parameter] public DateTime? MaxEndTime { get; set; } = null;
+    private DateTime StartTime { get; set; }
+    private DateTime EndTime { get; set; }
+
+    private bool poiChoosed = true;
+
+    private bool showPoIAdditionalComponent = false;
+    private bool showPoISearchParams = true;
+    private bool showPoISearchParamsCategories = false;
+    private bool showPoISearchResults = true;
+
+    private bool showSideAdditionalComponent = false;
+    private bool showSideSearchParams = true;
+    private bool showSideSearchResults = true;
+
+    private double Latitude { get; set; }
+    private double Longitude { get; set; }
+    private int Radius { get; set; } = 1;
+    private Language poiLang { get; set; } = Language.English;
+    private List<PointOfInteres.LocationCategory>? poiCategories = null;
+    private string? poiQuery = null;
+
+    private string responseMessage = string.Empty;
+    private bool searchLoading = false;
+
+    private List<PointOfInteres>? pois = null;
+    private int currentPoIIndex = 0;
+    private List<TourOrSideActivity>? sides = null;
+    private Dictionary<int, int> sideImageIndex = new();
+    private Dictionary<int, bool> sideDescriptionShow = new();
+    private int currentSideIndex = 0;
+
+    private Activity? chosenAct = null;
+    private bool showChosenAct = true;
+
+    protected override void OnInitialized()
+    {
+        MinStartTime ??= TourBuilder.Tour.StartDate;
+        MaxEndTime ??= TourBuilder.Tour.Program.FirstOrDefault(ac => MinStartTime.Value <= ac.StartDate.AddHours(-1))?.StartDate.AddHours(-0.5);
+        StartTime = MinStartTime.Value;
+        EndTime = StartTime.AddHours(0.5);
+
+        var hotelId = TourBuilder.Tour.HotelsOffers.LastOrDefault(ho => (
+            ho.CheckInDate.Date <= StartTime.Date && StartTime.Date <= ho.CheckOutDate.Date) || ho.CheckOutDate.Date <= StartTime.Date
+        )?.HotelId;
+        var loc = TourBuilder.Tour.Hotels.FirstOrDefault(h => h.HotelId == hotelId)?.Location;
+        if (loc != null)
+        {
+            Latitude = loc.Latitude;
+            Longitude = loc.Longitude;
+        }
+    }
+
+    private void OnCategoriesChange(PointOfInteres.LocationCategory category)
+    {
+        poiCategories ??= new();
+        if (poiCategories.Contains(category))
+            poiCategories.Remove(category);
+        else
+            poiCategories.Add(category);
+    }
+
+    private async Task GetPoIManually(string query)
+    {
+        responseMessage = string.Empty;
+
+        if (string.IsNullOrEmpty(query))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the query text";
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        showPoIAdditionalComponent = true;
+        showPoISearchParams = false;
+        showPoISearchParamsCategories = false;
+        showPoISearchResults = true;
+        pois = null;
+        chosenAct = null;
+
+        try
+        {
+            searchLoading = true;
+            await InvokeAsync(StateHasChanged);
+
+            var place = await TourBuilder.GetPlaceByQuery(query: query, retrieveDetails: true, fields: FieldTypes.Basic,
+                includePhotos: false, poiLang, Latitude, Longitude);
+            TourBuilder.Activities = new();
+
+            PointOfInteres poi = new()
+            {
+                Name = place.Name,
+                PlaceIconUrl = place.IconUri,
+                Location = place.Location,
+                Rank = (int?)place.Rating
+            };
+            TourBuilder.Activities.TryAdd("manual", poi);
+            poi.ActivityId = "manual";
+
+            pois = TourBuilder.Activities.Values.OfType<PointOfInteres>().ToList();
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            searchLoading = false;
+        }
+    }
+    private async Task GetPoIs()
+    {
+        responseMessage = string.Empty;
+
+        if (Latitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the latitude";
+        if (Longitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the longitude";
+        if (Radius < 1 || Radius > 20)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The radius must be within 1-20 inclusive";
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        showPoIAdditionalComponent = true;
+        showPoISearchParams = false;
+        showPoISearchParamsCategories = false;
+        showPoISearchResults = true;
+        pois = null;
+        chosenAct = null;
+
+        try
+        {
+            searchLoading = true;
+            await InvokeAsync(StateHasChanged);
+            await TourBuilder.SetPoIsAsync(Latitude, Longitude, Radius, poiCategories?.ToArray(), poiLang);
+            pois = TourBuilder.Activities.Values.OfType<PointOfInteres>().ToList();
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            searchLoading = false;
+        }
+    }
+
+    private async Task GetSides()
+    {
+        responseMessage = string.Empty;
+
+        if (Latitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the latitude";
+        if (Longitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the longitude";
+        if (Radius < 1 || Radius > 20)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The radius must be within 1-20 inclusive";
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        showSideAdditionalComponent = true;
+        showSideSearchParams = false;
+        showSideSearchResults = true;
+        sides = null;
+        chosenAct = null;
+        sideImageIndex = new();
+        sideDescriptionShow = new();
+
+        try
+        {
+            searchLoading = true;
+            await InvokeAsync(StateHasChanged);
+            await TourBuilder.SetSidesAsync(Latitude, Longitude, Radius);
+            sides = TourBuilder.Activities.Values.OfType<TourOrSideActivity>().ToList();
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            searchLoading = false;
+        }
+    }
+
+    private void MoveNext()
+    {
+        if (poiChoosed)
+        {
+            currentPoIIndex += 5;
+            if (currentPoIIndex >= pois.Count)
+                currentPoIIndex = pois.Count - 1;
+        }
+        else
+        {
+            currentSideIndex += 5;
+            if (currentSideIndex >= sides.Count)
+                currentSideIndex = sides.Count - 1;
+        }
+    }
+    private void MovePrevious()
+    {
+        if (poiChoosed)
+        {
+            currentPoIIndex -= 5;
+            if (currentPoIIndex < 0)
+                currentPoIIndex = 0;
+        }
+        else
+        {
+            currentSideIndex -= 5;
+            if (currentSideIndex < 0)
+                currentSideIndex = 0;
+        }
+    }
+
+    private void AddActivity()
+    {
+        responseMessage = string.Empty;
+
+        if (string.IsNullOrEmpty(chosenAct.Title))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the name of the activityc";
+        if (chosenAct.StartDate < (MinStartTime ?? TourBuilder.Tour.StartDate.Value))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The start time cannot be less than {MinStartTime.Value}";
+        if (chosenAct.StartDate >= chosenAct.EndDate)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The end time cannot be less than the start time";
+        if (MaxEndTime != null && chosenAct.EndDate > MaxEndTime.Value)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The end time cannot be more than {MaxEndTime.Value}";
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        if (chosenAct.ActivityId == "manual")
+            chosenAct.ActivityId = string.Empty;
+        TourBuilder.AddActivity(chosenAct);
+        OnExit?.Invoke();
+    }
+
+
+    [Parameter]
+    public Action OnExit { get; set; } = null!;
+}

@@ -1,0 +1,826 @@
+﻿@using GoogleApi.Entities.Common.Enums;
+@using GoogleApi.Entities.Places.Details.Request.Enums;
+@using Models;
+@using Newtonsoft.Json;
+@using System.Runtime.Serialization;
+@using Services;
+@using global::Services;
+
+<style>
+    .tab-row {
+        display: flex;
+        overflow: hidden;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        border-top-left-radius: 5px;
+        border-top-right-radius: 5px;
+        border-bottom: 2px solid cornflowerblue;
+    }
+
+    .tab {
+        display: flex;
+        width: 50%;
+        background-color: antiquewhite;
+        padding: 5px;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+    }
+
+    .chosen {
+        background-color: cornflowerblue;
+        color: antiquewhite;
+    }
+
+    .component-header {
+        display: inline-flex;
+        justify-content: space-between;
+        width: 100%;
+        border-bottom: 1px dashed aqua;
+        align-items: center;
+        padding: 8px;
+        margin-bottom: 0px;
+    }
+
+        .component-header h5 {
+            margin: 0;
+        }
+
+    .drop-button {
+        text-decoration: none;
+        margin: -5px;
+    }
+
+    .flipped {
+        transform: rotate(180deg);
+    }
+
+    .check-row {
+        display: inline-flex;
+        width: 100%;
+        align-items: center;
+    }
+
+        .check-row input {
+            margin: 0 0 0.5rem 5px
+        }
+
+    .form-container {
+        width: 100%;
+        border-radius: 10px;
+        padding: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .form-row {
+        display: inline-flex;
+        width: 100%;
+        height: 30px;
+        align-items: baseline;
+        margin-bottom: 12px;
+    }
+
+        .form-row h6 {
+            min-width: fit-content;
+            margin-right: 5px;
+        }
+
+        .form-row input {
+            width: fit-content;
+            font-size: 16px;
+            padding: 3px 5px;
+            margin-right: 5px;
+        }
+
+        .form-row select {
+            width: fit-content;
+            font-size: 16px;
+            padding: 3px 5px;
+            margin-right: 5px;
+        }
+
+        .form-row button {
+            height: 100%;
+            padding: 1%;
+        }
+</style>
+
+<div class="overlay">
+    <div class="logreg-container">
+        @if (!string.IsNullOrEmpty(responseMessage))
+        {
+            <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+        }
+
+        <div class="card">
+            <div class="card-body" style="width: 800px;">
+                <h4 class="card-title">Transportation search</h4>
+
+                @if (showAdditionalComponent)
+                {
+                    <div role="button" class="component-header" @onclick="() => 
+                        { 
+                            showSearchParams = !showSearchParams; showSearchResults = false; 
+                        }">
+                        <h5 class="form-label">Search parameters</h5>
+                        <a class="drop-button @(showSearchParams ? " flipped" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                            </svg>
+                        </a>
+                    </div>
+                }
+
+                @if (showSearchParams)
+                {
+                    <div class="mb-3" style="width: 100%; padding: 0 5px;">
+                        <div style="width: 100%; display: inline-flex; justify-content: space-between;">
+                            <div style="width: 45%;">
+                                <h5>From</h5>
+                                @if (TourBuilder.Tour.HotelsOffers.Any(ho => ho.CheckInDate <= MinStartTime))
+                                {
+                                    <div class="check-row">
+                                        <h6 title="@TourBuilder.Tour.Hotels.First(h => h.HotelId == TourBuilder.Tour.HotelsOffers.Last(ho => ho.CheckInDate <= MinStartTime).HotelId).Name" style="cursor: help;">The previous hotel:</h6>
+                                        <input type="checkbox" bind="@hotelChoosed" class="form-check-input" name="hotel" @onchange="(arg) => HotelChoosed = (bool)arg.Value">
+                                    </div>
+                                }
+                                @if (TourBuilder.Tour.Program.Any(ac => ac.EndDate <= MinStartTime && ac is not TransferOffer))
+                                {
+                                    <div class="check-row">
+                                        <h6 title="@TourBuilder.Tour.Program.Last(ac => ac.EndDate <= MinStartTime && ac is not TransferOffer).Title" style="cursor: help;">A past place of activity:</h6>
+                                        <input type="checkbox" bind="@googleStartPlaceChoosed" class="form-check-input" name="act" @onchange="(arg) => GoogleStartPlaceChoosed = (bool)arg.Value">
+                                    </div>
+                                }
+
+                                <div class="mb-3 form-container">
+                                    <div class="form-row">
+                                        <h6>Query:</h6>
+                                        <input id="query" @bind="startPlaceQuery" class="form-control" placeholder="You can request location details" />
+                                        <button class="btn btn-warning" style="display:flex; align-items: center; height: 34.5px; width: 34.5px; border-radius: 20px; justify-content: center;" @onclick="async () => await SetLocationDetails(true, startPlaceQuery)">
+                                            🔍
+                                        </button>
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Address:</h6>
+                                        <input id="line" @bind="StartAddress" class="form-control" placeholder="5 Avenue Anatole France" />
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>City:</h6>
+                                        <input id="city" @bind="StartCity" class="form-control" placeholder="English name" />
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Postal code:</h6>
+                                        <input id="postal" style="width: 100px;" @bind="StartPostal" class="form-control" placeholder="75000" />
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Country code:</h6>
+                                        <input style="width: 50px;" id="country" @bind="StartCountryCode" class="form-control" placeholder="FR" />
+                                        <h6 style="font-size: small;">@StartCountryName</h6>
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Latitude:</h6>
+                                        <input style="width: 90px;" id="postal" @bind="StartLatitude" class="form-control" placeholder="30.2623" />
+                                        <h6>Longitude:</h6>
+                                        <input style="width: 90px;" id="postal" @bind="StartLongitude" class="form-control" placeholder="2.13356" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="width: 45%">
+                                <h5>To</h5>
+                                <div class="mb-3 form-container">
+                                    @if (!IsFixedEndPlace)
+                                    {
+                                        <div class="form-row">
+                                            <h6>Query:</h6>
+                                            <input id="query" @bind="endPlaceQuery" class="form-control" placeholder="You can request location details" />
+                                            <button class="btn btn-warning" style="display:flex; align-items: center; height: 34.5px; width: 34.5px; border-radius: 20px; justify-content: center;" @onclick="async () => await SetLocationDetails(false, endPlaceQuery)">
+                                                🔍
+                                            </button>
+                                        </div>
+                                    }
+                                    <div class="form-row">
+                                        <h6>Address:</h6>
+                                        @if (!IsFixedEndPlace)
+                                        {
+                                            <input id="line" @bind="EndAddress" class="form-control" placeholder="5 Avenue Anatole France" />
+                                        }
+                                        else
+                                        {
+                                            <h6>@EndAddress</h6>
+                                        }
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>City:</h6>
+                                        @if (!IsFixedEndPlace)
+                                        {
+                                            <input id="city" @bind="EndCity" class="form-control" placeholder="English name" />
+                                        }
+                                        else
+                                        {
+                                            <h6>@EndCity</h6>
+                                        }
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Postal code:</h6>
+                                        @if (!IsFixedEndPlace)
+                                        {
+                                            <input id="postal" style="width: 100px;" @bind="EndPostal" class="form-control" placeholder="75000" />
+                                        }
+                                        else
+                                        {
+                                            <h6>@EndPostal</h6>
+                                        }
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Country code:</h6>
+                                        @if (!IsFixedEndPlace)
+                                        {
+                                            <input style="width: 50px;" id="postal" @bind="EndCountryCode" class="form-control" placeholder="FR" />
+                                        }
+                                        else
+                                        {
+                                            <h6>@EndCountryCode</h6>
+                                        }
+                                        <h6>@EndCountryName</h6>
+                                    </div>
+                                    <div class="form-row">
+                                        <h6>Latitude:</h6>
+                                        @if (!IsFixedEndPlace)
+                                        {
+                                            <input id="postal" style="width: 90px;" @bind="EndLatitude" class="form-control" placeholder="30.2623" />
+                                        }
+                                        else
+                                        {
+                                            <h6>@Math.Round(EndLatitude, 6)</h6>
+                                        }
+                                        <h6>Longitude:</h6>
+                                        @if (!IsFixedEndPlace)
+                                        {
+                                            <input id="postal" style="width: 90px;" @bind="EndLongitude" class="form-control" placeholder="2.13356" />
+                                        }
+                                        else
+                                        {
+                                            <h6>@Math.Round(EndLongitude, 6)</h6>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="width: 100%; display: inline-flex; justify-content: space-between; align-items: flex-end;">
+                            <div>
+                                <div class="form-row">
+                                    <h6>Departure time:</h6>
+                                    <InputDate Type="InputDateType.DateTimeLocal" @bind-Value="startTime" class="form-control" Format="yyyy-MM-dd HH:mm:ss" min="@MinStartTime" />
+                                </div>
+                                <h6>For @TourBuilder.Tour.ParticipantsMaxNumber passengers@(Children != null ? $" ({Children} children)" : string.Empty)</h6>
+                            </div>
+
+                            <div>
+                                <button class="additional-btn" @onclick="async () => await GetTransfers()">
+                                    Search for transfers
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (showAdditionalComponent)
+                {
+                    <div role="button" class="component-header" @onclick="() => 
+                        { 
+                            showSearchResults = !showSearchResults; showSearchParams = false; 
+                        }">
+                        <h5 class="form-label">Results</h5>
+                        <a class="drop-button @(showSearchResults ? " flipped" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                            </svg>
+                        </a>
+                    </div>
+
+                    @if (showSearchResults)
+                    {
+                        <div class="mb-3" style="position: relative; width: 100%; padding: 0 20px;">
+                            @if (searchLoading)
+                            {
+                                <div style="width: 100%; display: inline-flex; justify-content: center; margin-top: 1rem;">
+                                    <img src="/icons/plane.gif" alt="Loading..." />
+                                </div>
+                            }
+                            else if (transferOffers != null && transferOffers.Count > 0)
+                            {
+                                <div style="width: 100%; display: inline-flex;">
+                                    <h6 style="font-size: smaller; color: gray;">
+                                        @(currentIndex + 1)@(currentIndex + 3 >= transferOffers.Count ? '-' + transferOffers.Count.ToString() : '-' + (currentIndex + 3).ToString()) of @transferOffers.Count
+                                    </h6>
+                                </div>
+
+                                @foreach (var i in Enumerable.Range(currentIndex, Math.Min(3, transferOffers.Count - currentIndex)))
+                                {
+                                    int offerIndex = i;
+                                    offerPolicies.TryAdd(offerIndex, false);
+                                    <div class="mb-3" style="width: 100%; padding: 10px; border-radius: 10px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+                                        <div style="width: 100%; display: inline-flex; justify-content: space-between; align-items: start;">
+                                            <div style="display: inline-flex;">
+                                                <img src="@transferOffers[offerIndex].CarIconURL" height="60">
+                                                <div style="margin-left: 10px;">
+                                                    <h6>@transferOffers[offerIndex].Description</h6>
+                                                    <h6 style="font-size: 14px;">@transferOffers[offerIndex].VehType.GetEnumMemberValue(), @transferOffers[offerIndex].VehCategory.GetEnumMemberValue(), @transferOffers[offerIndex].TranType.GetEnumMemberValue()</h6>
+                                                </div>
+                                            </div>
+                                            <div style="display: inline-flex; align-items: center;">
+                                                @*<h6 style="font-size: small; margin-right: 5px;">@transferOffers[offerIndex].ProviderName</h6>*@
+                                                <img src="@transferOffers[offerIndex].ProviderLogoUrl" height="40">
+                                            </div>
+                                        </div>
+                                        <div style="display: inline-flex; margin: 0 10px; width: calc(100% - 20px); justify-content: space-between; align-items: end;">
+                                            <div style="text-align: center;">
+                                                <h6 style="font-size: small;">@transferOffers[offerIndex].StartLocation.ShortAddress</h6>
+                                                <h6 style="font-size: small;">@transferOffers[offerIndex].StartDate.ToString("HH:mm dd.MM")</h6>
+                                            </div>
+                                            <div>
+                                                <h6 style="font-size: small;">
+                                                    @ExecuteDiferenceLambda(() =>
+                                                    {
+                                                        var difference = (transferOffers[offerIndex].EndDate - transferOffers[offerIndex].StartDate);
+                                                        return $"{(int)difference.TotalHours} hours {(int)difference.TotalMinutes % 60} minutes";
+                                                    })
+                                                </h6>
+                                            </div>
+                                            <div style="text-align: center;">
+                                                <h6 style="font-size: small;">@transferOffers[offerIndex].EndLocation.ShortAddress</h6>
+                                                <h6 style="font-size: small;">@transferOffers[offerIndex].EndDate.ToString("HH:mm dd.MM")</h6>
+                                            </div>
+                                        </div>
+                                        <div style="text-align:center; margin: 0 80px;">
+                                            <div style="width: 100%; border: 2px solid royalblue;"></div>
+                                            <h6 style="font-size: small;">@transferOffers[offerIndex].DistanceValue@transferOffers[offerIndex].DistanceUnit?.ToLower()</h6>
+                                        </div>
+                                        <div style="display: inline-flex; width: 100%; justify-content: space-between; align-items: center;">
+                                            <h6 style="font-size: 14px;">
+                                                Payment methods:
+                                                <b>@string.Join(", ", transferOffers[offerIndex].PaymentMethods.Select(m => m.GetEnumMemberValue()).ToList())</b></h6>
+                                            <h6 style="font-size: 14px;">
+                                                Price: <b>@transferOffers[offerIndex].PriceAmount@transferOffers[offerIndex].Currency per
+                                                    @(
+                                                    transferOffers[offerIndex].TranType is TransferOffer.TransferType.SHARED
+                                                    || transferOffers[offerIndex].TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                                                    || transferOffers[offerIndex].TranType is TransferOffer.TransferType.AIRPORT_BUS
+                                                        ? "person" : "vehicle"
+                                                    )
+                                                </b>
+                                            </h6>
+                                        </div>
+                                        <div style="display: inline-flex; width: 100%; justify-content: space-between; align-items: end;">
+                                            <div style="min-width: 50%;">
+                                                <div role="button" style=" width: 100%; display: inline-flex; justify-content: space-between; align-items: center;" @onclick="() =>
+                                                    {
+                                                        offerPolicies = new(offerPolicies.Select(p => new KeyValuePair<int, bool>(p.Key, p.Key == offerIndex ? !p.Value : false)));
+                                                    }">
+                                                    <h6>Policy</h6>
+                                                    <p class="drop-button @(offerPolicies[offerIndex] ? " flipped" : "")">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="20" height="20" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                        </svg>
+                                                    </p>
+                                                </div>
+                                                @if (offerPolicies[offerIndex])
+                                                {
+                                                    foreach (var item in transferOffers[offerIndex].CancellationRules)
+                                                    {
+                                                        <div style="border-top: 1px dotted gray; padding-top: 5px;">
+                                                            @foreach (var rule in item)
+                                                            {
+                                                                <h6 style="font-size: small;">@rule.Key: @rule.Value</h6>
+                                                            }
+                                                        </div>
+                                                    }
+                                                }
+                                            </div>
+                                            <button class="additional-btn" @onclick="() => {
+                                                chosenAct = transferOffers[offerIndex];
+                                                showChosenAct = true; showSearchParams = false; showSearchResults = false;
+                                            }">
+                                                Choose
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+
+                                <div style="display: inline-flex; position: absolute; left: -8px; top: 50%;">
+                                    <a role="button" disabled="@(currentIndex <= 0)" class="drop-button" style="transform: rotate(90deg);" @onclick="MovePrevious">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalblue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+                                <div style="display: inline-flex; position: absolute; right: -8px; top: 50%;">
+                                    <a role="button" disabled="@(currentIndex + 3 >= transferOffers.Count)" class="drop-button" style="transform: rotate(270deg);" @onclick="MoveNext">
+                                        <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="royalBlue" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                            <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                        </svg>
+                                    </a>
+                                </div>
+                            }
+                            else
+                            {
+                                <label>No offers found</label>
+                            }
+                        </div>
+                    }
+                }
+
+                @if (chosenAct != null)
+                {
+                    <div role="button" class="component-header" @onclick="() => 
+                        { 
+                            showChosenAct = !showChosenAct; showSearchParams = false; showSearchResults = false; 
+                        }">
+                        <h5 class="form-label">Обрана активність</h5>
+                        <a class="drop-button @(showChosenAct ? " flipped" : "")">
+                            <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="30" height="30" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                            </svg>
+                        </a>
+                    </div>
+
+                    @if (showChosenAct)
+                    {
+                        if (chosenAct != null)
+                        {
+                            <div class="mb-3 form-container">
+                                <div style="position: relative;">
+                                    <h6 style="position: absolute; right: 5px; font-size: small;">Тип активності: @chosenAct.ActType.GetEnumMemberValue()</h6>
+                                </div>
+
+                                <div class="form-row">
+                                    <h6>Назва активності:</h6>
+                                    <input id="title" @bind="chosenAct.Title" class="form-control" placeholder="Перевезення..." />
+                                </div>
+
+                                <div class="form-row">
+                                    <h6>Час початку активності:</h6>
+                                    <h6>@chosenAct.StartDate.ToShortTimeString()</h6>
+                                </div>
+                                <div class="form-row">
+                                    <h6>Час кінця активності:</h6>
+                                    <h6>@chosenAct.EndDate.ToShortTimeString()</h6>
+                                </div>
+                                <div style="width: 100%; text-align: center;">
+                                    <button class="additional-btn" style="right: 10px;" @onclick="AddActivity">
+                                        Створити активність
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div style="width: 100%; display: inline-flex; justify-content: center;">
+                                <label>Точка інтересу не обрана</label>
+                            </div>
+                        }
+                    }
+                }
+
+                <div style="width: 100%; text-align: right;">
+                    <button class="secondary-btn" style="right: 10px;" @onclick="OnExit">
+                        Cancel
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public TourBuilder TourBuilder { get; set; } = null!;
+    [Parameter] public GooglePlace? StartPlace { get; set; } = null;
+    private Location StartLocation
+    {
+        get
+        {
+            return new()
+            {
+                ShortAddress = StartAddress,
+                Latitude = StartLatitude,
+                Longitude = StartLongitude,
+                AddressComponents = new()
+                {
+                    new()
+                    {
+                        Types = new List<Models.AddressComponentType>()
+                        {
+                            Models.AddressComponentType.Locality
+                        },
+                        ShortName = StartCity
+                    },
+                    new()
+                    {
+                        Types = new List<Models.AddressComponentType>()
+                        {
+                            Models.AddressComponentType.Postal_Code
+                        },
+                        ShortName = StartPostal
+                    },
+                    new()
+                    {
+                        Types = new List<Models.AddressComponentType>()
+                        {
+                            Models.AddressComponentType.Country
+                        },
+                        ShortName = StartCountryCode,
+                        LongName = StartCountryName
+                    }
+                }
+            };
+        }
+        set
+        {
+            StartAddress = value.ShortAddress;
+            StartLatitude = value.Latitude;
+            StartLongitude = value.Longitude;
+            StartCity = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Locality))?.ShortName;
+            StartPostal = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Postal_Code))?.ShortName;
+            StartCountryCode = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Country))?.ShortName;
+            StartCountryName = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Country))?.LongName;
+        }
+    }
+    [Parameter] public GooglePlace? EndPlace { get; set; } = null;
+    private Location EndLocation
+    {
+        get
+        {
+            return new()
+            {
+                ShortAddress = EndAddress,
+                Latitude = EndLatitude,
+                Longitude = EndLongitude,
+                AddressComponents = new()
+                {
+                    new()
+                    {
+                        Types = new List<Models.AddressComponentType>()
+                        {
+                            Models.AddressComponentType.Locality
+                        },
+                        ShortName = EndCity
+                    },
+                    new()
+                    {
+                        Types = new List<Models.AddressComponentType>()
+                        {
+                            Models.AddressComponentType.Postal_Code
+                        },
+                        ShortName = EndPostal
+                    },
+                    new()
+                    {
+                        Types = new List<Models.AddressComponentType>()
+                        {
+                            Models.AddressComponentType.Country
+                        },
+                        ShortName = EndCountryCode,
+                        LongName = EndCountryName
+                    }
+                }
+                };
+        }
+        set
+        {
+            EndAddress = value.ShortAddress;
+            EndLatitude = value.Latitude;
+            EndLongitude = value.Longitude;
+            EndCity = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Locality))?.ShortName;
+            EndPostal = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Postal_Code))?.ShortName;
+            EndCountryCode = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Country))?.ShortName;
+            EndCountryName = value.AddressComponents.FirstOrDefault(c => c.Types.Any(t => t == Models.AddressComponentType.Country))?.LongName;
+        }
+    }
+    [Parameter] public DateTime? MinStartTime { get; set; } = null;
+    [Parameter] public int? Children { get; set; } = null;
+    private DateTime startTime;
+    [Parameter] public bool IsFixedEndPlace { get; set; } = true;
+
+    private string StartAddress { get; set; } = string.Empty;
+    private string StartCity { get; set; } = string.Empty;
+    private string StartPostal { get; set; } = string.Empty;
+    private string StartCountryCode { get; set; } = string.Empty;
+    private string StartCountryName { get; set; } = string.Empty;
+    private double StartLatitude { get; set; }
+    private double StartLongitude { get; set; }
+
+    private string EndAddress { get; set; } = string.Empty;
+    private string EndCity { get; set; } = string.Empty;
+    private string EndPostal { get; set; } = string.Empty;
+    private string EndCountryCode { get; set; } = string.Empty;
+    private string EndCountryName { get; set; } = string.Empty;
+    private double EndLatitude { get; set; }
+    private double EndLongitude { get; set; }
+
+    private bool showSearchParams = true;
+    private bool hotelChoosed = false;
+    private bool HotelChoosed
+    {
+        get => hotelChoosed;
+        set
+        {
+            hotelChoosed = value;
+            if (hotelChoosed)
+            {
+                googleStartPlaceChoosed = false;
+                var hotelId = TourBuilder.Tour.HotelsOffers.Last(ho => ho.CheckOutDate <= MinStartTime).HotelId;
+                if (!string.IsNullOrEmpty(hotelId))
+                {
+                    StartLocation = TourBuilder.Tour.Hotels.FirstOrDefault(h => h.HotelId == hotelId).Location;
+                }
+            }
+        }
+    }
+    private bool googleStartPlaceChoosed = false;
+    private bool GoogleStartPlaceChoosed
+    {
+        get => googleStartPlaceChoosed;
+        set
+        {
+            googleStartPlaceChoosed = value;
+            if (googleStartPlaceChoosed)
+            {
+                hotelChoosed = false;
+                var activity = TourBuilder.Tour.Program.Last(ac => ac.EndDate <= MinStartTime && ac is not TransferOffer);
+                if (activity != null)
+                {
+                    switch (activity)
+                    {
+                        case PointOfInteres poi:
+                            StartLocation = poi.Location;
+                            if (StartLocation != null && string.IsNullOrEmpty(StartLocation.ShortAddress))
+                                SetLocationDetails(true, poi.Name);
+                            break;
+                        case TourOrSideActivity tos:
+                            StartLocation = tos.Location;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+    }
+    private bool showAdditionalComponent;
+    private bool showSearchResults = true;
+    private string? startPlaceQuery = null;
+    private string? endPlaceQuery = null;
+    private string responseMessage = string.Empty;
+    private bool searchLoading;
+
+    private List<TransferOffer>? transferOffers = null;
+    private int currentIndex = 0;
+    private Dictionary<int, bool> offerPolicies = new();
+    private string ExecuteDiferenceLambda(Func<string> func) => func();
+
+    private TransferOffer? chosenAct = null;
+    private bool showChosenAct = true;
+
+    protected override void OnInitialized()
+    {
+        MinStartTime ??= TourBuilder.Tour.StartDate;
+        startTime = MinStartTime.Value;
+
+        if (StartPlace != null && StartPlace is Hotel)
+        {
+            StartLocation = StartPlace.Location;
+            hotelChoosed = true;
+        }
+
+        EndLocation = EndPlace?.Location ?? new();
+    }
+
+    private async Task SetLocationDetails(bool isStartPlace, string query)
+    {
+        // Check if the query is not empty
+        if (string.IsNullOrEmpty(query))
+            return;
+
+        // Get the details of the place using a request to the Google service
+        var place = await TourBuilder.GetPlaceByQuery(query: query, retrieveDetails: true, fields: FieldTypes.Basic,
+            includePhotos: false, Language.Ukrainian, StartLocation.Latitude, StartLocation.Longitude);
+
+        // Set the appropriate place (start or end) for the journey
+        if (isStartPlace)
+            StartLocation = place.Location;
+        else
+            EndLocation = place.Location;
+
+        // Update the corresponding visual element to reflect the changes
+        StateHasChanged();
+    }
+
+    private async Task GetTransfers()
+    {
+        responseMessage = string.Empty;
+
+        if (startTime < MinStartTime)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Start time cannot be earlier than {MinStartTime.Value.ToShortTimeString()}";
+
+        if (string.IsNullOrEmpty(StartAddress))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the start address";
+        if (string.IsNullOrEmpty(StartCity))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the start city";
+        if (string.IsNullOrEmpty(StartPostal))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the start postal code";
+        if (string.IsNullOrEmpty(StartCountryCode))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the start country code";
+        if (StartLatitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the start latitude";
+        if (StartLongitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the start longitude";
+
+        if (string.IsNullOrEmpty(EndAddress))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the end address";
+        if (string.IsNullOrEmpty(EndCity))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the end city";
+        if (string.IsNullOrEmpty(EndPostal))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the end postal code";
+        if (string.IsNullOrEmpty(EndCountryCode))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the end country code";
+        if (EndLatitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the end latitude";
+        if (EndLongitude.ToString().Length <= 0)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the end longitude";
+
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        transferOffers = null;
+        currentIndex = 0;
+        offerPolicies = new();
+        showSearchParams = false;
+        showSearchResults = true;
+        searchLoading = true;
+        showAdditionalComponent = true;
+        chosenAct = null;
+        try
+        {
+            await TourBuilder.SetTransferOffers(StartLocation, EndLocation, startTime, TourBuilder.Tour.ParticipantsMaxNumber, Children, lang: Language.Ukrainian);
+            transferOffers = TourBuilder.Activities.Values.OfType<TransferOffer>().ToList();
+        }
+        catch (Exception ex)
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "" : "<br>" +
+                ex.Message;
+        }
+        finally
+        {
+            searchLoading = false;
+        }
+    }
+
+    private void MoveNext()
+    {
+        currentIndex += 3;
+        if (currentIndex >= transferOffers.Count)
+            currentIndex = transferOffers.Count - 1;
+        offerPolicies = new();
+    }
+    private void MovePrevious()
+    {
+        currentIndex -= 3;
+        if (currentIndex < 0)
+            currentIndex = 0;
+        offerPolicies = new();
+    }
+
+    private void AddActivity()
+    {
+        responseMessage = string.Empty;
+
+        if (string.IsNullOrEmpty(chosenAct.Title))
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Enter the name of the activity";
+
+        if (!string.IsNullOrEmpty(responseMessage))
+            return;
+
+        TourBuilder.AddActivity(chosenAct);
+        OnExit?.Invoke();
+    }
+
+    [Parameter]
+    public Action OnExit { get; set; } = null!;
+}

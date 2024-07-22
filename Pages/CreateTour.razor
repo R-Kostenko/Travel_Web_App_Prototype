@@ -1,524 +1,1109 @@
 ﻿@page "/create-tour";
-@using Travel_App_Web.Models;
+@using Models;
+@using Newtonsoft.Json;
+@using Services;
+@using System.Collections.Concurrent;
+@using System.Text;
+@using System.Threading;
+@using static Services.CurrencyConverter;
 @inject HttpClient HttpClient;
 @inject NavigationManager NavigationManager;
+@inject TourBuilder TourBuilder;
+@inject CurrencyConverter CurrencyConverter;
+@inject UserStateService UserStateService;
 
 <title>Create Tour</title>
 
-<h3>Create New Tour</h3>
+<style>
+    .constructor-block {
+        border-radius: 20px;
+        background-color: rgba(255, 255, 255, 0.8);
+    }
 
-<EditForm EditContext=editContext OnValidSubmit="@Create">
-    <div class="card" style="margin:5px 0 5px 0;">
+    .constructor-h6 {
+        font-size: 18px;
+        font-weight: 500;
+    }
+
+    .agency-card {
+        width: 200px;
+        padding: 0px 5px;
+        display: inline-flex;
+        border-radius: 10px;
+        background-color: lightgray;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        align-items: center;
+    }
+
+    .day-container {
+        position: relative;
+        height: 60px;
+    }
+
+    .day-info {
+        border-top: 1px dotted royalblue;
+        background-color: white;
+        padding: 10px 0 40px 10px;
+        position: absolute;
+        left: -100px;
+    }
+
+    .program {
+        margin: 20px;
+        border-radius: 20px;
+        padding: 20px;
+        background-color: white;
+    }
+
+        .program ul {
+            margin: 0;
+            list-style: none;
+            position: relative;
+            padding: 20px 104px;
+        }
+
+            .program ul:before {
+                content: "";
+                width: 1px;
+                height: 100%;
+                position: absolute;
+                top: 0;
+                border-left: 4px dashed royalblue;
+            }
+
+            .program ul li {
+                position: relative;
+                margin: 30px 0;
+                margin-left: 30px;
+                background-color: gainsboro;
+                padding: 14px;
+                border-radius: 10px;
+                border: 1px solid grey;
+                min-width: 300px;
+                width: fit-content;
+                max-width: 90%;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            }
+
+                .program ul li.cut-top {
+                    border-top-left-radius: 0px;
+                    border-top-right-radius: 0px;
+                }
+
+                .program ul li.cut-bottom {
+                    border-bottom-left-radius: 0px;
+                    border-bottom-right-radius: 0px;
+                }
+
+                .program ul li > span {
+                    width: 6px;
+                    background: royalblue;
+                    left: -32px;
+                    top: 0;
+                    position: absolute;
+                }
+
+                    .program ul li > span:before, .program ul li > span:after {
+                        content: "";
+                        width: 14px;
+                        height: 14px;
+                        border-radius: 50%;
+                        border: 2px solid royalblue;
+                        position: absolute;
+                        background: white;
+                        left: -4px;
+                        top: -1px;
+                    }
+
+                .program ul li span:after {
+                    top: calc(100% - 1px);
+                }
+
+                .program ul li > div {
+                    margin-left: 10px;
+                }
+
+        .program div .title {
+            font-weight: 600;
+            font-size: 17px;
+        }
+
+        .program div .type {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .program div .info {
+            font-weight: 300;
+            display: inline-flex;
+        }
+
+
+        .program span.number {
+            height: calc(100% - 8px);
+        }
+
+            .program span.number span {
+                position: absolute;
+                font-size: 14px;
+                left: -46px;
+                font-weight: bold;
+            }
+
+                .program span.number span:first-child {
+                    top: -6px;
+                }
+
+                .program span.number span:last-child {
+                    bottom: -15px;
+                }
+
+    .drop-button {
+        text-decoration: none;
+        margin: -5px;
+    }
+
+    .flipped {
+        transform: rotate(180deg);
+    }
+
+    .form-row {
+        display: inline-flex;
+        width: 100%;
+        height: 30px;
+        align-items: baseline;
+        margin-bottom: 10px;
+    }
+
+        .form-row h6 {
+            min-width: fit-content;
+            margin-right: 5px;
+        }
+
+        .form-row input {
+            width: fit-content;
+            font-size: small;
+            padding: 5px;
+            margin-right: 5px;
+        }
+
+    .act-container {
+        display: inline-flex;
+        padding-left: 30px;
+    }
+
+        .act-container button {
+            margin-right: 10px;
+            color: slateblue;
+        }
+
+    .order-btn {
+        font-size: 20px;
+        margin: 2px;
+        border: 2px solid transparent;
+    }
+
+    .city-div {
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        align-items: center;
+    }
+</style>
+
+<div style="width: 100%;
+    display: inline-flex;
+    background-color: transparent;
+    justify-content: center;">
+    <div style="width: fit-content;
+    margin: 10px;
+    padding: 10px 20px;
+    font-size: 24px;
+    font-weight: 500;
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 20px;">
+        New Tour
+    </div>
+</div>
+
+<EditForm EditContext=editContext>
+    <div class="card constructor-block" style="margin:10px 0 10px 0;">
+        <div class="card-body" style="display: inline-flex; justify-content: space-between;">
+            <div style="position: relative;
+            display: inline-flex;
+            width: 65%;
+            border-radius: 10px;
+            border: 1px solid burlywood;
+            overflow: hidden;
+            margin-right: 10px;
+            align-items: center;
+            justify-content: center;">
+                @if (imageData != null)
+                {
+                    <img src="@imageData" style="width: 100%; height: fit-content;" />
+                    <button type="button" class="btn-close text-white" style="position: absolute; top: 5px; right: 5px; background-color: rgba(128, 128, 128, 0.7); width: 20px; height: 20px; border-radius: 20px;" aria-label="Close" @onclick="ClearFile"></button>
+                }
+                else
+                {
+                    <h5 for="photo" class="form-label constructor-h6">Tour Image:</h5>
+                    <InputFile id="photo" style="width: fit-content; margin:0 10px;" class="form-control" OnChange="HandleFileSelected" multiple="false" accept="image/jpeg, image/png, image/webp" />
+                }
+            </div>
+            <div style="width: 33%;">
+                <div style="display: inline-flex;
+                @(tour.Agency is null ? "align-items: baseline;" : "align-items: center;")
+                margin-top: 20px;">
+                    <label class="form-label constructor-h6" style="margin-right: 10px;">Tour agency*:</label>
+                    @if (tour.Agency != null)
+                    {
+                        <div class="agency-card">
+                            <div style="display: block;">
+                                <label style="font-size: 18px;">@tour.Agency.Name</label>
+                                <label style="font-size: 16px;">@tour.Agency.Country.Name</label>
+                            </div>
+                            <button type="button" class="btn-close text-white" style="float: right; top: 5px;" aria-label="Close" @onclick="() => tour.Agency = null"></button>
+                        </div>
+                    }
+                    else
+                    {
+                        <button type="button" class="primary-btn" @onclick="() => showTourAgencyComp = true">Register an agency</button>
+                    }
+                </div>
+                <div style="margin-top: 20px;">
+                    <h5 for="startDate" class="form-label constructor-h6">Start date of the tour*:</h5>
+                    <InputDate id="startDate" style="width: fit-content;" @bind-Value="tour.StartDate" class="form-control" min="@DateTime.Today.AddDays(14)" />
+                    <ValidationMessage For="@(() => tour.StartDate)" />
+                </div>
+                <div style="margin-top: 20px;">
+                    <h5 for="currency" class="form-label constructor-h6">Currency*:</h5>
+                    <select id="currency" class="form-select" @bind="CurrencyInput" style="width: 100px;">
+                        @foreach (var curr in Enum.GetValues(typeof(CurrencyCode)))
+                        {
+                            var enumValue = (CurrencyCode)curr;
+                            <option value="@enumValue">@enumValue.GetEnumMemberValue()</option>
+                        }
+                    </select>
+                    <ValidationMessage For="@(() => tour.Currency)" />
+                </div>
+                <div style="margin-top: 20px; margin-bottom: 20px;">
+                    <h5>Maximum number of participants*:</h5>
+                    <div style="display: inline-flex; align-items: flex-end;">
+                        <h5 for="partCount" class="form-label constructor-h6">General*:</h5>
+                        <InputNumber id="partCount" @bind-Value="tour.ParticipantsMaxNumber" @onchange="TourBuilder.RemoveTransfers" class="form-control" style="padding: 4px 10px;margin-left: 5px;max-width: 60px;" min="1" max="20" />
+                    </div>
+                    @if (tour.ParticipantsMaxNumber > 1)
+                    {
+                        <div style="display: inline-flex; align-items: flex-end; margin-left: 15px;">
+                            <label for="childrenCount" class="form-label" style="font-size: 16px;">Children:</label>
+                            <InputNumber id="childrenCount" @bind-Value="childrenNumber" @onchange="TourBuilder.RemoveTransfers" class="form-control" style="padding: 4px 10px;margin-left: 5px;max-width: 60px;" min="0" max="@(tour.ParticipantsMaxNumber - 1)" />
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card constructor-block" style="margin:10px 0 10px 0;">
         <div class="card-body">
             <div class="mb-3 col-md-8 col-sm-6">
-                <label for="title" class="form-label">Title*:</label>
-                <InputText id="title" @bind-Value="tour.Title" class="form-control" />
+                <h5 for="title" class="form-label">Title*:</h5>
+                <InputText id="title" style="font-size: 20px;" @bind-Value="tour.Title" class="form-control" />
                 <ValidationMessage For="@(() => tour.Title)" />
             </div>
 
             <div class="mb-3">
-                <label for="description" class="form-label">Description*:</label>
+                <h5 for="description" class="form-label">Tour Description*:</h5>
                 <textarea id="description" @bind="tour.Description" class="form-control"></textarea>
                 <ValidationMessage For="@(() => tour.Description)" />
             </div>
+        </div>
+    </div>
 
-            <div class="mb-3 col-md-2">
-                <label for="startDate" class="form-label">Start Date*:</label>
-                <InputDate id="startDate" @bind-Value="tour.StartDate" @onblur="OnDatesChange" class="form-control" min="@DateTime.Today.AddDays(14).ToString("yyyy-MM-dd")" />
-                <ValidationMessage For="@(() => tour.StartDate)" />
-            </div>
+    <div style="width: 100%; text-align: center; display: inline-flex; justify-content: center; margin: 10px 0 10px 0;">
+        <div class="card constructor-block" style="width: fit-content; padding: 0 20px;">
+            <div class="card-body row">
+                <label for="citiesList" class="form-label constructor-h6">List of cities:</label>
+                <div style="width: 100%; display: inline-flex; align-items: center; justify-content: center;">
+                    @for (int i = 0; i < tour.Cities.Count; i++)
+                    {
+                        int index = i;
+                        <div class="city-div">
+                            <img src="/icons/icons8-location-blue-74.png" style="width: 50px;" />
+                            <h6>@tour.Cities[index].Name</h6>
+                            <h6 style="font-size: 15px;">@tour.Cities[index].Country.Name</h6>
+                            <button type="button" class="btn-close text-white" style="position: absolute; top: -5px; right: -5px; background-color: rgba(128, 128, 128, 0.7); width: 10px; height: 10px; border-radius: 20px;" aria-label="Close" @onclick="() => tour.Cities.RemoveAt(index)"></button>
+                        </div>
 
-            <div class="mb-3 col-md-2">
-                <label for="endDate" class="form-label">End Date*:</label>
-                <InputDate id="endDate" @bind-Value="tour.EndDate" @onblur="OnDatesChange" class="form-control" min="@DateTime.Today.AddDays(17).ToString("yyyy-MM-dd")" />
-                <ValidationMessage For="@(() => tour.EndDate)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="photo" class="form-label">Tour Photo:</label>
-                <InputFile id="photo" OnChange="HandleFileSelected" multiple="false" accept="image/jpeg, image/png, image/webp" />
-                <button type="button" class="btn btn-secondary" @onclick="ClearFile">Clear</button>
+                        <div style="margin: 0 10px;"><img src="/icons/icons8-направо-черное-24.png" /></div>
+                    }
+                    <div class="city-div">
+                        <div>
+                            <CountryComponent Country="@country" ResponseMessage="@responseMessage" OnUpdate="UpdateCountry" />
+                        </div>
+                        <div style="display: inline-flex;align-items: baseline;">
+                            @if (country != null)
+                            {
+                                <input id="city" @bind="SelectedCity" class="form-control" list="cityList" placeholder="Англ назва міста" style="margin-top: 5px;max-width: 80%;margin-right: 5px;" />
+                                <datalist id="cityList">
+                                    @foreach (var city in filteredCities)
+                                    {
+                                        <option value="@city.Name">@city.Name</option>
+                                    }
+                                </datalist>
+                                <button type="button" class="btn btn-primary" style="margin-top: 5px; border-radius: 20px;" @onclick="AddCityAsync">&#10003;</button>
+                            }
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="card" style="margin:5px 0 5px 0;">
+    <div style="width: 100%; text-align: center; display: inline-flex; justify-content: center; margin: 10px 0 10px 0;">
+        <div class="card constructor-block" style="width: fit-content; padding: 0 20px;">
+            <div class="card-body row">
+                <div class="mb-3 col-md-6">
+                    <label for="includedOptions" class="form-label constructor-h6">Included in the tour price:</label>
+                    <div>
+                        <ul class="list-group mt-2">
+                            @foreach (var inOption in tour.Included)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center" style="border-radius: 10px; padding-right: 5px;">
+                                    @inOption
+                                    <button type="button" class="btn-close text-white" style="background-color: rgba(128, 128, 128, 0.7); width: 20px; height: 20px; border-radius: 20px;" aria-label="Close" @onclick="() => tour.Included.Remove(inOption)"></button>
+                                </li>
+                            }
+                        </ul>
+
+                        <input id="includedOptions" @bind="selectedIncludedOption" class="form-control" list="IncludedOptionsList" style="margin-top: 5px;" />
+                        <button type="button" class="additional-btn" style="margin-top: 5px;" @onclick="AddIncludedOption">Add an option</button>
+                    </div>
+                </div>
+
+                <div class="mb-3 col-md-6">
+                    <label for="notIncludedOptions" class="form-label constructor-h6">Not included:</label>
+                    <div>
+                        <ul class="list-group mt-2">
+                            @foreach (var noOption in tour.NotIncluded)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center" style="border-radius: 10px; padding-right: 5px;">
+                                    @noOption
+                                    <button type="button" class="btn-close text-white" style="background-color: rgba(128, 128, 128, 0.7); width: 20px; height: 20px; border-radius: 20px;" aria-label="Close" @onclick="() => tour.NotIncluded.Remove(noOption)"></button>
+                                </li>
+                            }
+                        </ul>
+                        <input id="notIncludedOptions" @bind="selectedNotIncludedOption" class="form-control" list="notIncludedOptionsList" style="margin-top: 5px;" />
+                        <button type="button" class="additional-btn" style="margin-top: 5px;" @onclick="AddNotIncludedOption">Add an option</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card constructor-block" style="margin: 10px 0 10px 0;">
         <div class="card-body">
-            <div class="mb-3 col-md-4">
-                <label for="cities" class="form-label">Cities*:</label>
-                <div>
-                    <ul class="list-group mt-2" style="display: flex; flex-direction: column; align-items: stretch;">
-                        @foreach (var city in tour.Cities)
-                        {
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                @if (city.Country != null)
+            <div class="mb-3">
+                <h5 for="program" class="form-label">Tour Program*:</h5>
+                <div class="program">
+                    @if (tour.StartDate != null)
+                    {
+
+                        <h6 style="margin-bottom: 0; border-bottom: 4px solid royalblue; width: 108px; font-size: 19px; font-weight: 600;">The beginning</h6>
+                        <ul>
+                            @{
+                                DateTime day = tour.StartDate.Value.Date;
+                                DateTime endDate = tour.HotelsOffers.Count > 0 ? tour.HotelsOffers.Last().CheckOutDate.Date : day.AddDays(-1);
+                                endDate = tour.Program.Count > 0 ? (tour.Program.Last().EndDate.Date > endDate ? tour.Program.Last().EndDate.Date : endDate) : endDate;
+
+                                do
                                 {
-                                    <li class="list-group-item col-md-4" style="flex-grow: 1;">@city.Name - @city.Country</li>
+                                    DateTime dayDate = day;
+                                    tour.DayTitles.TryAdd(dayDate.ToShortDateString(), string.Empty);
+                                    <div class="day-container">
+                                        <div class="day-info form-row">
+                                            <h6 style="font-weight: 600; font-size: 16px; margin-right: 10px;">
+                                                @dayDate.ToString("M")
+                                            </h6>
+                                            <h6 style="font-size: 18px;">Day @((dayDate.Date - tour.StartDate.Value.Date).TotalDays + 1):</h6>
+                                            <input style="font-size: 18px;" @bind="tour.DayTitles[dayDate.ToShortDateString()]" class="form-control" placeholder="Headline of the day" />
+                                        </div>
+                                    </div>
+
+                                    if (tour.Program.Any(a => a.StartDate.Date == dayDate || a.EndDate.Date == dayDate))
+                                    {
+                                        for (int i = tour.Program.FindIndex(a => a.StartDate.Date == dayDate || a.EndDate.Date == dayDate);
+                                        i <= tour.Program.FindLastIndex(a => a.StartDate.Date == dayDate || a.EndDate.Date == dayDate);
+                                        i++)
+                                        {
+                                            int activityIndex = i;
+
+                                            if (activityIndex == 0
+                                            && tour.Program[activityIndex].StartDate.Date > tour.StartDate.Value.Date
+                                            && tour.Program[activityIndex].StartDate.Date == dayDate)
+                                            {
+                                                <div class="act-container">
+                                                    <button class="additional-btn" @onclick="() =>
+                                                        CreatePoiOrSideActivity(tour.StartDate.Value, tour.Program[activityIndex].StartDate.AddHours(-0.5))">
+                                                        Add a point of interest or local tour/event
+                                                    </button>
+                                                    <button class="additional-btn" @onclick="() =>
+                                                        CreateTransfer(null, null, tour.StartDate.Value, false)">
+                                                        Add transportation
+                                                    </button>
+                                                </div>
+                                            }
+
+                                            if (activityIndex > 0
+                                            && (tour.Program[activityIndex].StartDate - tour.Program[activityIndex - 1].EndDate).TotalHours > 1.5
+                                            && tour.Program[activityIndex].StartDate.Date == dayDate)
+                                            {
+                                                <div class="act-container">
+                                                    <button class="additional-btn" @onclick="() =>
+                                                        CreatePoiOrSideActivity(tour.Program[activityIndex - 1].EndDate.AddHours(0.5), tour.Program[activityIndex].StartDate.AddHours(-0.5))">
+                                                        Add a point of interest or local tour/event
+                                                    </button>
+                                                    <button class="additional-btn" @onclick="() =>
+                                                        CreateTransfer(null, null, tour.Program[activityIndex - 1].EndDate.AddHours(0.5), false)">
+                                                        Add transportation
+                                                    </button>
+                                                </div>
+                                            }
+                                            <li class="@(tour.Program[activityIndex].StartDate.Date != dayDate ? "cut-top" : (tour.Program[activityIndex].EndDate.Date != dayDate ? "cut-bottom" : ""))">
+                                                <span></span>
+                                                <div>
+                                                    <div style="display: inline-flex; width: 95%; margin-bottom: 5px;">
+                                                        <h6 class="title">@tour.Program[activityIndex].Title</h6>
+                                                        <h6 style="margin: 0 5px;"> | </h6>
+                                                        <h6 class="type">@tour.Program[activityIndex].ActType.GetEnumMemberValue()</h6>
+                                                    </div>
+
+                                                    <button type="button" style="position: absolute; top: 5px; right: 5px;" class="btn-close text-white" aria-label="Close" @onclick="() => CancelActivity(tour.Program[activityIndex])"></button>
+
+                                                    @switch (tour.Program[activityIndex])
+                                                    {
+                                                        case PointOfInteres poi:
+                                                            {
+                                                                <div class="info">
+                                                                    <img src="@poi.PlaceIconUrl" height="40">
+                                                                    <div style="margin-left: 10px; display: inline-flex; align-items: baseline; flex-wrap: wrap;">
+                                                                        <h6>@poi.Name</h6>
+                                                                        <h6 style="margin: 0 5px;"> | </h6>
+                                                                        <h6>@poi.Category.GetEnumMemberValue()</h6>
+                                                                        @if (poi.Rank != null)
+                                                                        {
+                                                                            <h6 style="margin: 0 5px;"> | </h6>
+                                                                            <h6>Rank: @poi.Rank</h6>
+                                                                        }
+                                                                        @if (poi.Tags != null && poi.Tags.Count > 0)
+                                                                        {
+                                                                            <h6 style="margin: 0 5px;"> | </h6>
+                                                                            <h6>Tags: @string.Join(", ", poi.Tags.Select(t => '#' + t).ToList())</h6>
+                                                                        }
+                                                                    </div>
+                                                                </div>
+                                                                break;
+                                                            }
+                                                        case TransferOffer transfer:
+                                                            {
+                                                                <div class="info" style="align-items: center;">
+                                                                    <img src="@transfer.CarIconURL" height="60">
+                                                                    <div style="margin-left: 10px; display: inline-flex; flex-wrap: wrap;">
+                                                                        <h6>Type: @transfer.TranType.GetEnumMemberValue()</h6>
+                                                                        <h6 style="margin: 0 5px;"> | </h6>
+                                                                        <h6>Vehicle: @transfer.VehCategory.GetEnumMemberValue(), @transfer.VehType.GetEnumMemberValue()</h6>
+                                                                        @if (transfer.Description != null)
+                                                                        {
+                                                                            <h6 style="margin: 0 5px;"> | </h6>
+                                                                            <h6>@transfer.Description</h6>
+                                                                        }
+                                                                        <h6 style="margin: 0 5px;"> | </h6>
+                                                                        <h6>@transfer.StartLocation.ShortAddress -> @transfer.EndLocation.ShortAddress</h6>
+                                                                        <h6 style="margin: 0 5px;"> | </h6>
+                                                                        <h6 style="font-weight: 700;">
+                                                                            @(transfer.PriceAmount + transfer.Currency) (@(transfer.TranType is TransferOffer.TransferType.SHARED
+                                                                            || transfer.TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                                                                            || transfer.TranType is TransferOffer.TransferType.AIRPORT_BUS
+                                                                            ? "per person" : "per vehicle"))
+                                                                        </h6>
+                                                                    </div>
+                                                                </div>
+                                                                break;
+                                                            }
+                                                        case TourOrSideActivity side:
+                                                            {
+                                                                <div class="info" style="width: 100%;">
+                                                                    @if (@side.PicturesUrls.Count > 0)
+                                                                    {
+                                                                        <img src="@side.PicturesUrls[0]" style="border-radius: 5px; width: 350px; max-width: 50%; height: fit-content;">
+                                                                    }
+                                                                    <div style="margin-left: 10px; display: block; width: calc(100% - 380px);">
+                                                                        @if (!string.IsNullOrEmpty(side.Description))
+                                                                        {
+                                                                            sideDescriptionShow.TryAdd(activityIndex, false);
+                                                                            <div style="width: 100%; display: inline-flex; align-items: flex-start;@(sideDescriptionShow[activityIndex] ? "" : " height: 60px; overflow: hidden;")">
+                                                                                <h6 style="font-size: 15px; margin-right: 2px;@(sideDescriptionShow[activityIndex] ? "" : " overflow: hidden; text-overflow: ellipsis; white-space: nowrap;")">@((MarkupString)side.Description)</h6>
+
+                                                                                <a role="button" class="drop-button @(sideDescriptionShow[activityIndex] ? " flipped" : "")"
+                                                                                @onclick="() => sideDescriptionShow[activityIndex] = !sideDescriptionShow[activityIndex]">
+                                                                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="20" height="20" fill="currentColor" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                                                    </svg>
+                                                                                </a>
+                                                                            </div>
+                                                                        }
+                                                                        <div style="display: inline-flex; width: 70%;">
+                                                                            <h6 style="font-size: 15px;"><a href="@side.BookingLink" target="_blank">Website</a></h6>
+                                                                            <h6 style="margin: 0 5px;"> | </h6>
+                                                                            <h6 style="font-weight: 700;">@(side.PriceAmount + side.Currency)</h6>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                break;
+                                                            }
+                                                    }
+                                                </div>
+                                                <span class="number">
+                                                    <span>@(tour.Program[activityIndex].StartDate.Date == dayDate ? tour.Program[activityIndex].StartDate.ToShortTimeString() : "")</span>
+                                                    <span>@(tour.Program[activityIndex].EndDate.Date == dayDate ? tour.Program[activityIndex].EndDate.ToShortTimeString() : "")</span>
+                                                </span>
+                                            </li>
+                                        }
+                                    }
+
+                                    @if (tour.Program.Count > 0 ? dayDate == tour.Program.Last().EndDate.Date
+                                        : tour.HotelsOffers.Count > 0 ? dayDate == tour.HotelsOffers.First().CheckInDate.Date : true)
+                                    {
+                                        <div class="act-container">
+                                            <button class="additional-btn" @onclick="() =>
+                                                CreatePoiOrSideActivity(tour.Program.Count > 0 ? tour.Program.Last().EndDate.AddHours(0.5) : null, null)">
+                                                Add a point of interest or local tour/event
+                                            </button>
+                                            <button class="additional-btn" @onclick="() =>
+                                                CreateTransfer(null, null, tour.Program.Count > 0 ? tour.Program.Last().EndDate.AddHours(0.5) : null, false)">
+                                                Add transportation
+                                            </button>
+                                        </div>
+                                    }
+
+                                    <div style="position: relative; height: 80px;">
+                                        <div style="display: inline-flex; align-items: baseline; background-color: white; margin-top: 5px; padding: 10px; position: absolute; left: -75px;">
+                                            @{
+                                                var hotelOffer = tour.HotelsOffers.FirstOrDefault(ho => ho.CheckInDate.Date == dayDate || (ho.CheckInDate.Date < dayDate && ho.CheckOutDate.Date > dayDate));
+                                                if (!string.IsNullOrEmpty(hotelOffer?.HotelId))
+                                                {
+                                                    var hotel = tour.Hotels.First(h => h.HotelId == hotelOffer.HotelId);
+                                                    <h6 style="margin: 0; font-size: 16px; font-weight: 600;">
+                                                        @hotel.Name
+                                                    </h6>
+                                                    <h6 style="margin: 0 5px;"> | </h6>
+                                                    <h6 style="margin: 0; font-size: 15px;">@hotel.City.Name</h6>
+                                                    @if (!tour.Program.Any(a =>
+                                                    {
+                                                        if (a is TransferOffer to)
+                                                        {
+                                                            return (to.EndLocation.PlaceId == hotel.PlaceId ||
+                                                            (Math.Abs(to.EndLocation.Latitude - hotel.Location.Latitude) <= 0.0001 && Math.Abs(to.EndLocation.Longitude - hotel.Location.Longitude) <= 0.0001))
+                                                            && (to.EndDate.Date == hotelOffer.CheckInDate.Date || to.EndDate.AddDays(1).Date == hotelOffer.CheckInDate.Date);
+                                                        }
+                                                        else
+                                                            return false;
+                                                    }))
+                                                    {
+                                                        <button style="margin-left: 10px; color: slateblue;" class="additional-btn" @onclick="() =>
+                                                            CreateTransfer(null, hotel, hotelOffer.CheckInDate.AddDays(-1), true)">
+                                                            Add transportation
+                                                        </button>
+                                                    }
+
+                                                    <button type="button" style="margin-left: 20px;" class="btn-close text-white" aria-label="Close" @onclick="() => CancelHotelOffers(hotelOffer.OfferId)"></button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="additional-btn" style="border-radius: 10px;" @onclick="() =>
+                                                        CreateHotelOffer(dayDate, tour.HotelsOffers.FirstOrDefault(ho => ho.CheckInDate.Date >= dayDate)?.CheckInDate.Date)">
+                                                        Add a hotel
+                                                    </button>
+                                                }
+                                            }
+                                        </div>
+                                    </div>
+
+                                    day = day.AddDays(1);
                                 }
-                                else
-                                {
-                                    <li class="list-group-item col-md-4" style="flex-grow: 1;">@city.Name</li>
-                                }
-                                <button type="button" class="btn btn-secondary col-md-1" style="margin-left: 5px;" @onclick="() => RemoveElement<City>(tour.Cities, city)">X</button>
-                            </div>
-                        }
-                    </ul>
-                    <input id="cities" @bind="selectedCity" @oninput="SearchCities" class="form-control" list="cityList" style="margin-top: 5px;" />
-                    <datalist id="cityList">
-                        @foreach (var city in filteredCities)
-                        {
-                            <option value="@city.Name"></option>
-                        }
-                    </datalist>
-                    <button type="button" class="btn btn-primary mt-2" style="margin-top: 5px;" @onclick="AddCity">Add City</button>                    
+                                while (day <= endDate);
+                            }
+                        </ul>
+                        <h6 style="margin-top: 0; border-top: 4px solid royalblue; width: 108px; font-size: 19px; font-weight: 600;">The end</h6>
+                    }
+                    else
+                    {
+                        <h6 style="color: red;">Select the start date of the tour</h6>
+                    }
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card" style="margin:5px 0 5px 0;">
-        <div class="card-body">
-            <label class="form-label"> Prices (Based on apartments):</label>
 
-            @if (tour.Prices.Count != 0)
-            {
-                <table class="table row">
-                    <thead class="mb-3">
-                        <tr class="col-md-5">
-                            <th class="col-md-3" scope="col">Apartment Type</th>
-                            <th class="col-md-2" scope="col">Price</th>
-                            <th class="col-md-1" scope="col"></th>
-                        </tr>
-                    </thead>
-                    <tbody class ="mb-3">
-                        @foreach (var price in tour.Prices)
-                        {
-                            <tr class="col-md-4">
-                                <td class="col-md-2">@price.ApartmentType</td>
-                                <td class="col-md-2">@price.PriceEUR.ToString("0.00") EUR</td>                                
-                                <td class="col-md-1">
-                                    <button type="button" class="btn btn-secondary" style="margin-left: 5px;" @onclick="() => RemoveElement<Apartment>(tour.Prices, price)">X</button>
-                                </td>
-                            </tr>                            
-                        }
-                    </tbody>
-                </table>
-            }
-       
-            <div class="mb-3 row">
+    @if (showTourAgencyComp)
+    {
+        <TourAgencyComponent Agency="tour.Agency" OnExit="(agency) =>
+        {
+            tour.Agency = agency;
+            showTourAgencyComp = false;
+            SetCurrency();
+            StateHasChanged();
+        }" />
+    }
 
-                <div class="col-md-3">
-                    <label for="priceDescription" class="form-label">Description:</label>
-                    <InputText id="priceDescription" @bind-Value="priceDescription" class="form-control" />
-                </div>
-                <div class="col-md-2">
-                    <label for="priceAmount" class="form-label">Amount (EUR):</label>
-                    <InputNumber id="priceAmount" @bind-Value="priceAmount" class="form-control" />
-                </div>
-                <div class="col-md-2 col-lg-1">
-                    <label class="form-label">&nbsp;</label>
-                    <button type="button" class="btn btn-primary form-control" @onclick="AddPrice">Add Price</button>
-                </div>
-            </div>
-        </div>
-    </div>
+    @if (showHotelSearch)
+    {
+        <HotelSearchComponent TourBuilder="TourBuilder" StartDate="startHotelOfferDate" EndDate="endHotelOfferDate" OnExit="() => showHotelSearch = false" />
+    }
+    @if (showTransferSearch)
+    {
+        <TransferOfferComponent TourBuilder="TourBuilder" MinStartTime="minActStartTime" StartPlace="startTransfPlace"
+                            EndPlace="endTransfPlace" IsFixedEndPlace="isFixedTransfEndPlace" Children="childrenNumber" OnExit="() => showTransferSearch = false" />
+    }
+    @if (showPoISideSearch)
+    {
+        <PoISideComponent TourBuilder="TourBuilder" MinStartTime="minActStartTime" MaxEndTime="maxActEndTime" OnExit="() => showPoISideSearch = false" />
+    }
 
-    <div class="card" style="margin:5px 0 5px 0;">
-        <div class="card-body row">
-            <div class="mb-3 col-md-3">
-                <label for="includedOptions" class="form-label">Included Options:</label>
-                <div>
-                    <ul class="list-group mt-2">
-                        @foreach (var inOption in tour.Included)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                @inOption.Content
-                                <button type="button" class="btn btn-secondary" @onclick="() => RemoveElement<Option>(tour.Included, inOption)">X</button>
-                            </li>
-                        }
-                    </ul>
+    @if (!string.IsNullOrEmpty(responseMessage))
+    {
+        <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+    }
 
-                    <input id="includedOptions" @bind="selectedIncludedOption" class="form-control" list="includedOptionsList" style="margin-top: 5px;" />
-                    <button type="button" class="btn btn-primary mt-2" style="margin-top: 5px;" @onclick="AddIncludedOption">Add Option</button>
-                </div>
-            </div>
+    <div style="position: fixed;
+    z-index: 3;
+    bottom: 30px;
+    right: 30px;
+    width: fit-content;
+    border-radius: 21px;
+    overflow: hidden;
+    backdrop-filter: saturate(180%) blur(8px);
+    background-color: rgba(250, 250, 252, 0.8);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);">
+        <div style="display: inline-flex; margin: 10px; width: fit-content; justify-content: center; align-items: center;">
+            @{
+                double activitySum = 0, minHotelOfferPrice = 0, maxHotelOfferPrice = 0;
 
-            <div class="mb-3 col-md-3">
-                <label for="notIncludedOptions" class="form-label">Not Included Options:</label>
-                <div>
-                    <ul class="list-group mt-2">
-                        @foreach (var noOption in tour.NotIncluded)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                @noOption.Content
-                                <button type="button" class="btn btn-secondary" @onclick="() => RemoveElement<Option>(tour.NotIncluded, noOption)">X</button>
-                            </li>
-                        }
-                    </ul>
-                    <input id="notIncludedOptions" @bind="selectedNotIncludedOption" class="form-control" list="notIncludedOptionsList" style="margin-top: 5px;" />
-                    
-                    <button type="button" class="btn btn-primary mt-2" style="margin-top: 5px;" @onclick="AddNotIncludedOption">Add Option</button>
-                </div>
-            </div>
-        </div>
-    </div>
+                if (tour.Program.Count > 0)
+                {
+                    List<Activity> activities = new();
+                    activities.AddRange(tour.Program.OfType<TransferOffer>());
+                    activities.AddRange(tour.Program.OfType<TourOrSideActivity>());
 
-    <div class="card" style="margin:5px 0 5px 0;">
-        <div class="card-body row">
-            <label class="form-label"> Program (Enter dates of start and end):</label>
+                    var groupedActivity = activities.GroupBy(ac => ac is TransferOffer to ? to.Currency : (ac as TourOrSideActivity).Currency);
+                    foreach (var group in groupedActivity)
+                    {
+                        double sum = group.Sum(ac => (
+                        ac is TransferOffer to
+                        ? to.TranType is TransferOffer.TransferType.SHARED
+                        || to.TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                        || to.TranType is TransferOffer.TransferType.AIRPORT_BUS
+                        ? to.PriceAmount : (to.PriceAmount / ((double)tour.ParticipantsMaxNumber / 2.5))
+                        : (ac as TourOrSideActivity).PriceAmount) ?? 0);
+                        double convertedSum = !string.IsNullOrEmpty(tour.Currency) ? CurrencyConverter.Convert(sum, group.Key, tour.Currency) : 0;
+                        activitySum += convertedSum;
+                    }
+                }
 
-            @foreach (var day in tour.Days)
-            {
-                <div class="col-md-6" style="border-top: 2px solid #ccc; margin-top: 10px; padding-top: 10px;">
-                    <label class="form-label">Day @day.Number</label>
+                if (tour.HotelsOffers.Count > 0)
+                {
+                    var groupedHotelsOffers = tour.HotelsOffers.GroupBy(ho => ho.CheckInDate);
+                    List<HotelsOffer> minPrices = new();
+                    List<HotelsOffer> maxPrices = new();
+                    foreach (var group in groupedHotelsOffers)
+                    {
+                        minPrices.Add(group.MinBy(ho => (double)ho.PriceTotal));
+                        maxPrices.Add(group.MaxBy(ho => (double)ho.PriceTotal));
+                    }
 
-                    <div class="mb-3 col-md-6">
-                        <label class="form-label">Title*:</label>
-                        <InputText @bind-Value="day.Title" class="form-control" />
-                        <ValidationMessage For="@(() => day.Title)" />
-                    </div>
+                    var groupedMinPrices = minPrices.GroupBy(ho => ho.Currency);
+                    var groupedMaxPrices = maxPrices.GroupBy(ho => ho.Currency);
+                    foreach (var min in groupedMinPrices)
+                    {
+                        double sum = min.Sum(ho => (double)ho.PriceTotal);
+                        minHotelOfferPrice += !string.IsNullOrEmpty(tour.Currency) ? CurrencyConverter.Convert(sum, min.Key, tour.Currency) : 0;
+                    }
+                    foreach (var max in groupedMaxPrices)
+                    {
+                        double sum = max.Sum(ho => (double)ho.PriceTotal);
+                        maxHotelOfferPrice += !string.IsNullOrEmpty(tour.Currency) ? CurrencyConverter.Convert(sum, max.Key, tour.Currency) : 0;
+                    }
+                }
 
-                    <div class="mb-3">
-                        <label class="form-label">Description*:</label>
-                        <textarea @bind="day.Description" class="form-control"></textarea>
-                        <ValidationMessage For="@(() => day.Description)" />
-                    </div>
+                tour.AmountRange = $"{Math.Round(minHotelOfferPrice + activitySum + tour.ExtraAmount, 2)} - {Math.Round(maxHotelOfferPrice + activitySum + tour.ExtraAmount, 2)} {tour.Currency.ToUpper()}";
 
-                    <div class="mb-3">
-                        <label for="photo" class="form-label">Day Photos:</label>
-                        <InputFile id="photo" OnChange="(e) => HandleFilesSelected(ref daysImages, day.Number - 1, e)" multiple="true" accept="image/jpeg, image/png, image/webp" />
-                        <button type="button" class="btn btn-secondary" @onclick="() => ClearFiles(ref daysImages, day.Number - 1)">Clear</button>
-                    </div>
-                </div>
+                <h6 style="font-size: 16px; margin-right: 5px; font-weight: 600;">Price:</h6>
+                <h6 style="font-size: 15px; font-weight: 600;">@(Math.Round(minHotelOfferPrice + activitySum + tour.ExtraAmount, 2))</h6>
+                <h6 style="font-size: 15px; margin-left: 5px; margin-right: 5px; font-weight: 600;">-</h6>
+                <h6 style="font-size: 15px; font-weight: 600;">@(Math.Round(maxHotelOfferPrice + activitySum + tour.ExtraAmount, 2))</h6>
+                <h6 style="font-size: 15px; margin-left: 5px; font-weight: 600;">(@tour.Currency.ToLower())</h6>
+                <h6 style="font-size: 15px; margin-left: 5px; margin-right: 5px;">+</h6>
+                <InputNumber @bind-Value="tour.ExtraAmount" class="form-control" style="padding: 0px 4px;margin-left: 5px;max-width: 100px; margin-bottom: 0.5rem;" />
+                <h6 style="font-size: 15px; margin-left: 5px;">(Extra charge)</h6>
             }
         </div>
+        @if (tourBuilding)
+        {
+            <div style="width: 100%; display: inline-flex; z-index: 20; background-color: white; justify-content: center;">
+                <img style="width: 70%;" src="/icons/plane.gif" alt="Loading..." />
+            </div>
+        }
+        <button type="submit" class="primary-btn order-btn" @onclick="Create">Create a tour</button>
     </div>
-
-    <div class="card" style="margin:5px 0 5px 0;">
-        <div class="card-body row">
-            <label class="form-label"> Hotel:</label>
-
-            <div class="mb-3">
-                <label class="form-label">Description*:</label>
-                <textarea @bind="tour.Hotel.Description" class="form-control"></textarea>
-                <ValidationMessage For="@(() => tour.Hotel.Description)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="photo" class="form-label">Hotel Photos:</label>
-                <InputFile id="photo" OnChange="(e) => HandleFilesSelected(ref hotelImages, e)" multiple="true" accept="image/jpeg, image/png, image/webp" />
-                <button type="button" class="btn btn-secondary" @onclick="() => ClearFiles(ref hotelImages)">Clear</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="card" style="margin:5px 0 5px 0;">
-        <div class="card-body row">
-            <label class="form-label"> Bus:</label>
-
-            <div class="mb-3">
-                <label class="form-label">Description*:</label>
-                <textarea @bind="tour.Bus.Description" class="form-control"></textarea>
-                <ValidationMessage For="@(() => tour.Bus.Description)" />
-            </div>
-
-            <div class="mb-3">
-                <label for="photo" class="form-label">Bus Photos:</label>
-                <InputFile id="photo" OnChange="(e) => HandleFilesSelected(ref busImages, e)" multiple="true" accept="image/jpeg, image/png, image/webp" />
-                <button type="button" class="btn btn-secondary" @onclick="() => ClearFiles(ref busImages)">Clear</button>
-            </div>
-        </div>
-    </div>
-
-    <label>@responseMessage</label>
-
-    <button type="submit" class="btn btn-primary" style="margin-top: 10px">Create Tour</button>
 </EditForm>
 
 @code {
-    private Tour tour;
+    private Tour tour = new();
     EditContext editContext = null!;
+    private bool tourBuilding;
     private string responseMessage = string.Empty;
+    private bool showTourAgencyComp = false;
+    UploadImage? tourImage;
+    private string? imageData;
+    private CurrencyCode CurrencyInput
+    {
+        get => (CurrencyCode)Enum.Parse(typeof(CurrencyCode), tour.Currency);
+        set => tour.Currency = value.GetEnumMemberValue();
+    }
+    private int childrenNumber = 0;
 
-    IBrowserFile tourImage = null!;
-
-    List<City>? cities;
+    private Country? country = null;
+    private City? city = null;
     private string selectedCity = string.Empty;
+    private string SelectedCity
+    {
+        get => selectedCity;
+        set
+        {
+            selectedCity = value;
+            SearchCities();
+        }
+    }
+    private List<City> cities = new();
     private List<City> filteredCities = new();
-    private List<City> selectedCities = new();
 
-    private string priceDescription = string.Empty;
-    private decimal priceAmount;
+    private bool showHotelSearch = false;
+    private bool showTransferSearch = false;
+    private bool showPoISideSearch = false;
+
+    private Dictionary<int, bool> sideDescriptionShow = new();
 
     private string selectedIncludedOption = string.Empty;
     private string selectedNotIncludedOption = string.Empty;
 
-    private List<IBrowserFile[]> daysImages = new();
-
-    private IBrowserFile[] hotelImages = new IBrowserFile[0];
-    private IBrowserFile[] busImages = new IBrowserFile[0];
-
-
-    private void OnDatesChange()
+    private void UpdateCountry(Country? _country, string message)
     {
-        if (tour.StartDate < DateTime.Now || tour.EndDate < DateTime.Now) return;
+        country = _country;
+        responseMessage = message;
 
-        if ((tour.EndDate - tour.StartDate).Days + 1 > tour.Days.Count)
-        {
-            while ((tour.EndDate - tour.StartDate).Days + 1 > tour.Days.Count)
+        if (country != null)
+            Task.Run(async () =>
             {
-                daysImages.Add(new IBrowserFile[0]);
+                var citiesResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/cities/{country.CCA2}");
+                if (citiesResponse != null && citiesResponse.IsSuccessStatusCode)
+                    cities = await citiesResponse.Content.ReadFromJsonAsync<List<City>>();
+                else
+                    responseMessage = await citiesResponse.Content.ReadAsStringAsync();
+                await InvokeAsync(StateHasChanged);
+            });
 
-                tour.Days.Add(new()
-                {
-                    Number = tour.Days.Count + 1,
-                    Title = "Title",
-                    Description = "Description",
-                    Images = new()
-                }
-                );
-            }
-        }
-        else if ((tour.EndDate - tour.StartDate).Days + 1 < tour.Days.Count)
-        {
-            while ((tour.EndDate - tour.StartDate).Days + 1 < tour.Days.Count)
-            {
-                daysImages.RemoveAt(tour.Days.Count - 1);
-
-                tour.Days.RemoveAt(tour.Days.Count - 1);
-            }
-        }
-        else
-            return;
+        StateHasChanged();
     }
-
-    private void HandleFileSelected(InputFileChangeEventArgs e) => tourImage = e.File;
-    private void ClearFile() => tourImage = null!;
-
     private void SearchCities()
     {
-        filteredCities = cities.Where(city => city.Name.Contains(selectedCity, StringComparison.OrdinalIgnoreCase)).
-        OrderBy(city => city.Name).ToList();
-    }
-    private void AddCity()
-    {
-        if (!string.IsNullOrWhiteSpace(selectedCity) /*&& cities.All(city => !city.Name.Equals(selectedCity, StringComparison.OrdinalIgnoreCase))*/)
+        if (string.IsNullOrEmpty(selectedCity) || selectedCity.Any(c => !char.IsAsciiLetter(c)))
         {
-            City? city = cities.Find(city => city.Name == selectedCity);
-            if (city == null)
-            {
-                city = new() { Name = selectedCity };
-                cities.Add(city);
-            }
+            selectedCity = string.Empty;
+            return;
+        }
 
-            if (tour.Cities == null) tour.Cities = new();
-            tour.Cities.Add(city);
+        filteredCities = cities.Where(c => c.Name.Contains(selectedCity, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(c => c.Name).ToList();
+    }
+    private async Task AddCityAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(selectedCity))
+        {
+            var chosenCity = cities.Find(c => c.Name.Equals(selectedCity));
+            if (chosenCity != null)
+            {
+                city = chosenCity;
+                city.Country = country;
+                tour.Cities.Add(city);
+                city = null;
+                country = null;
+            }
+            else
+            {
+                var cityResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"location/add-city/{country.CCA2}-{selectedCity}");
+                if (cityResponse.IsSuccessStatusCode)
+                {
+                    string resultJson = await cityResponse.Content.ReadAsStringAsync();
+                    var result = JsonConvert.DeserializeObject<List<City>>(resultJson);
+
+                    if (result != null && result.Count == 1)
+                    {
+                        cities.Add(result[0]);
+                        city = result[0];
+                        tour.Cities.Add(city);
+                        city = null;
+                        country = null;
+                        responseMessage = string.Empty;
+                    }
+                    else if (result != null && result.Count > 1)
+                    {
+                        cities.AddRange(result);
+
+                        responseMessage = "New cities have been added to the list";
+                    }
+                    else
+                        responseMessage = "The city was not found";
+                }
+                else
+                {
+                    responseMessage = await cityResponse.Content.ReadAsStringAsync();
+                }
+            }
 
             selectedCity = string.Empty;
             filteredCities.Clear();
         }
     }
 
-    private void AddPrice()
+    private void SetCurrency()
     {
-        if (priceDescription == string.Empty || priceAmount == 0) return;
+        if (tour.Agency is not null && Enum.TryParse(typeof(CurrencyCode), tour.Agency.Country.Currencies.FirstOrDefault().Key, true, out object? code))
+            CurrencyInput = (CurrencyCode)code;
+        else
+            CurrencyInput = CurrencyCode.USD;
+    }
 
-        tour.Prices.Add(new() { ApartmentType = priceDescription, PriceEUR = priceAmount });
-        priceDescription = string.Empty;
-        priceAmount = new();
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        if (e.File != null)
+        {
+            using (var stream = e.File.OpenReadStream())
+            {
+                using (var memoryStream = new MemoryStream())
+                {
+                    await stream.CopyToAsync(memoryStream);
+                    var bytes = memoryStream.ToArray();
+                    tourImage = new()
+                        {
+                            Data = bytes,
+                            Size = bytes.Length,
+                            Name = e.File.Name,
+                            ContentType = e.File.ContentType
+                        };
+                    imageData = $"data:image/{tourImage.ContentType};base64," + Convert.ToBase64String(bytes);
+                }
+            }
+        }
+    }
+    private void ClearFile()
+    {
+        tourImage = null;
+        imageData = null;
+    }
+
+    private void CancelActivity(Activity activity) => TourBuilder.RemoveActivity(activity);
+    private void CancelHotelOffers(string offerId) => TourBuilder.RemoveHotelOffers(offerId);
+
+    private DateTime? minActStartTime;
+    private DateTime? maxActEndTime;
+    private DateTime startHotelOfferDate;
+    private DateTime? endHotelOfferDate;
+    private GooglePlace? startTransfPlace;
+    private GooglePlace? endTransfPlace;
+    bool isFixedTransfEndPlace;
+
+    private void CreatePoiOrSideActivity(DateTime? minStartTime, DateTime? maxEndTime)
+    {
+        minActStartTime = minStartTime;
+        maxActEndTime = maxEndTime;
+        showPoISideSearch = true;
+    }
+    private void CreateTransfer(GooglePlace? startPlace, GooglePlace? endPlace, DateTime? minStartTime, bool isFixedEndPlace)
+    {
+        startTransfPlace = startPlace;
+        endTransfPlace = endPlace;
+        minActStartTime = minStartTime;
+        maxActEndTime = null;
+        isFixedTransfEndPlace = isFixedEndPlace;
+        showTransferSearch = true;
+    }
+    private void CreateHotelOffer(DateTime startDate, DateTime? endDate)
+    {
+        startHotelOfferDate = startDate;
+        endHotelOfferDate = endDate;
+        showHotelSearch = true;
     }
 
     private void AddIncludedOption()
     {
         if (selectedIncludedOption == string.Empty) return;
 
-        tour.Included.Add(new() { Content = selectedIncludedOption });
+        tour.Included.Add(selectedIncludedOption);
         selectedIncludedOption = string.Empty;
     }
     private void AddNotIncludedOption()
     {
         if (selectedNotIncludedOption == string.Empty) return;
 
-        tour.NotIncluded.Add(new() { Content = selectedNotIncludedOption });
+        tour.NotIncluded.Add(selectedNotIncludedOption);
         selectedNotIncludedOption = string.Empty;
     }
-
-    private void RemoveElement<T>(List<T> List, T obj) => List.Remove(obj);
-
-    private void ClearFiles(ref IBrowserFile[] browserFiles) => browserFiles = null;
-    private void HandleFilesSelected(ref IBrowserFile[] browserFiles, InputFileChangeEventArgs e)
-    {
-        browserFiles = e.GetMultipleFiles().ToArray<IBrowserFile>();
-    }
-
-    private void ClearFiles(ref List<IBrowserFile[]> browserFiles, int index) => browserFiles[index] = null;
-    private void HandleFilesSelected(ref List<IBrowserFile[]> browserFiles, int index, InputFileChangeEventArgs e)
-    {
-        browserFiles[index] = e.GetMultipleFiles().ToArray<IBrowserFile>();
-    }
-
 
     private async Task Create()
     {
         responseMessage = string.Empty;
 
         bool isFormValid = editContext.Validate();
+
         if (!isFormValid)
-        {
-            responseMessage = "Form is not valid";
-            return;
-        }
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Check the completeness of the form";
+
         if (tourImage == null)
-        {
-            responseMessage += "\nAttach tour image";
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"Add a tour image";
+        if (tour.ParticipantsMaxNumber < 1 || tour.ParticipantsMaxNumber > 20)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The maximum number of participants should be between 1-20 inclusive";
+        if (tour.Program.Count < 1)
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"The tour must include at least one activity";
+        foreach (var dayTitle in tour.DayTitles)
+            if (string.IsNullOrEmpty(dayTitle.Value))
+                responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                    $"Add a headline for the day {dayTitle.Key}";
+
+        if (!string.IsNullOrEmpty(responseMessage))
             return;
-        }
-        foreach (var fileArray in daysImages)
+
+        var imageUploadResponse = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "file/upload-tour-image", tourImage);
+
+        if (imageUploadResponse.IsSuccessStatusCode)
         {
-            if (fileArray is null)
-            {
-                responseMessage += "\nInput Dates!";
-                return;
-            }
-            if (fileArray.Length == 0)
-            {
-                responseMessage += "\nAttach images to day!";
-                return;
-            }
-        }
-        if (hotelImages.Length == 0)
-        {
-            responseMessage += "\nAttach hotel images";
-            return;
-        }
-        if (busImages.Length == 0)
-        {
-            responseMessage += "\nAttach bus images";
-            return;
-        }
-
-
-        MultipartFormDataContent formData = new();
-        formData.Add(new StreamContent(tourImage.OpenReadStream()), "file", tourImage.Name);
-
-        var response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-tour-image", formData);
-
-        if (response.IsSuccessStatusCode)
-        {
-            tour.ImagePath = await response.Content.ReadAsStringAsync();
-
-            tourImage = null;
+            tour.ImagePath = await imageUploadResponse.Content.ReadAsStringAsync();
+            //tourImage = null;
         }
         else
         {
-            responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                    $"Error recording a tour image: {await imageUploadResponse.Content.ReadAsStringAsync()}";
             return;
         }
 
-        foreach (var day in tour.Days)
+
+        try
         {
-            if (daysImages[day.Number - 1].Length == 0) continue;
-
-            formData = new MultipartFormDataContent();
-
-            foreach (var file in daysImages[day.Number - 1])
+            tourBuilding = true;
+            await TourBuilder.BuildAsync();
+            responseMessage = "<h5 style=\"color: green\">The tour was created successfully<h5>";
+            StateHasChanged();
+            await Task.Delay(2000);
+            NavigationManager.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                $"{ex.Message}";
+            var imageDeleteResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + $"file/delete-file/{tour.ImagePath.Replace('/', '_')}");
+            if (!imageDeleteResponse.IsSuccessStatusCode)
             {
-                formData.Add(new StreamContent(file.OpenReadStream()), "files", file.Name);
-            }
-
-            response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-days-images", formData);
-
-            if (response.IsSuccessStatusCode)
-            {
-                if (day.Images == null) day.Images = new();
-
-                List<string>? pathes = await response.Content.ReadFromJsonAsync<List<string>>();
-
-                foreach (var path in pathes)
-                {
-                    day.Images.Add(new() { Path = path });
-                }
-            }
-            else
-            {
-                responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
+                responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                    $"Error deleting a tour image: {await imageDeleteResponse.Content.ReadAsStringAsync()}";
                 return;
             }
         }
-
-        formData = new MultipartFormDataContent();
-
-        foreach (var file in hotelImages)
+        finally
         {
-            formData.Add(new StreamContent(file.OpenReadStream()), "files", file.Name);
+            tourBuilding = false;
         }
-
-        response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-hotel-images", formData);
-
-        if (response.IsSuccessStatusCode)
-        {
-            if (tour.Hotel.Images == null) tour.Hotel.Images = new();
-
-            List<string>? pathes = await response.Content.ReadFromJsonAsync<List<string>>();
-
-            foreach (var path in pathes)
-            {
-                tour.Hotel.Images.Add(new() { Path = path });
-            }
-        }
-        else
-        {
-            responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
-            return;
-        }
-
-        formData = new MultipartFormDataContent();
-
-        foreach (var file in busImages)
-        {
-            formData.Add(new StreamContent(file.OpenReadStream()), "files", file.Name);
-        }
-
-        response = await HttpClient.PostAsync(NavigationManager.BaseUri + "file/upload-bus-images", formData);
-
-        if (response.IsSuccessStatusCode)
-        {
-            if (tour.Bus.Images == null) tour.Bus.Images = new();
-
-            List<string>? pathes = await response.Content.ReadFromJsonAsync<List<string>>();
-
-            foreach (var path in pathes)
-            {
-                tour.Bus.Images.Add(new() { Path = path });
-            }
-        }
-        else
-        {
-            responseMessage += $"\n{await response.Content.ReadAsStringAsync()}";
-            return;
-        }
-
-
-        var tourResponse = await HttpClient.PostAsJsonAsync(NavigationManager.BaseUri + "tour/create-tour", tour);
-
-        responseMessage += $"\n{await tourResponse.Content.ReadAsStringAsync()}";
     }
 
     protected override async Task OnInitializedAsync()
     {
-        tour = new();
-        tour.Users = new();
-        tour.Cities = new();
-        tour.Prices = new();
-        tour.Included = new();
-        tour.NotIncluded = new();
-        tour.Days = new();
-        tour.Hotel = new();
-        tour.Bus = new();
+        editContext = new(tour);
 
-        editContext = new(tour); 
+        // Assigning the tour object to TourBuilder
+        TourBuilder.Tour = tour;
 
-        cities = await HttpClient.GetFromJsonAsync<List<City>>(NavigationManager.BaseUri + "city/cities");
-        cities.OrderBy(city => city.Name).ToList();
+        // Check if the user is not authenticated
+        if (UserStateService.User is null)
+        {
+            // Save the current path and redirect to the login page
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+        // Check if the user does not have the manager role
+        else if (UserStateService.User.Role.RoleName != "Manager")
+        {
+            // Redirect to the home page
+            NavigationManager.NavigateTo("");
+        }
+
+        // Subscribe to the user update event to get agency information
+        UserStateService.OnUserUpdate += async (user) => await GetAgency();
+
+        // Subscribe to the authorization denial event to redirect to the home page
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("/");
+
+        // Call the method to get agency information
+        await GetAgency();
+    }
+
+    private async Task GetAgency()
+    {
+        // Check if the user is not authorized
+        if (UserStateService.User == null)
+            NavigationManager.NavigateTo("/");
+
+        // Send a request to get agency information by manager
+        var agencyResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + "tour/agency/get-by-manager");
+
+        if (agencyResponse.IsSuccessStatusCode)
+        {
+            try
+            {
+                // Deserialize the response into a TourAgency object
+                var agency = await agencyResponse.Content.ReadFromJsonAsync<TourAgency?>();
+
+                // Check if the agency name is not empty
+                if (!string.IsNullOrEmpty(agency?.Name))
+                {
+                    // Assign the agency to the tour
+                    tour.Agency = agency;
+                }
+
+                // Set the visibility state of the agency component
+                showTourAgencyComp = tour.Agency is null;
+
+                // Call the method to set the currency
+                SetCurrency();
+            }
+            catch (Exception ex)
+            {
+                string message = ex.ToString(); // Log the exception (not shown in the user interface)
+            }
+        }
+        else
+        {
+            // Form an error message for the request
+            responseMessage += (string.IsNullOrEmpty(responseMessage) ? "" : "<br>") +
+                    $"Agency request error: {await agencyResponse.Content.ReadAsStringAsync()}";
+        }
+
+        // Update the component state
+        await InvokeAsync(StateHasChanged);
     }
 }

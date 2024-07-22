@@ -1,5 +1,5 @@
 ﻿@inherits ComponentBase
-@using Travel_App_Web.Models
+@using Models
 @using System.Globalization
 @using System.Threading.Tasks
 @inject IJSRuntime JSRuntime
@@ -12,14 +12,14 @@
         flex-direction: column;
         padding: 15px;
         padding-right: 10px;
-        scrollbar-width: thin; /* для Firefox */
-        scrollbar-color: transparent transparent; /* для Firefox */
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
     }
         .chat-container::-webkit-scrollbar {
-            width: 5px; /* ширина ползунка для других браузеров */
+            width: 5px;
         }
         .chat-container::-webkit-scrollbar-thumb {
-            background-color: transparent; /* цвет ползунка для других браузеров */
+            background-color: transparent;
         }
 
     .log-reg {
@@ -146,6 +146,7 @@
         font-size: 26px;
         transform: rotate(-90deg);
         text-decoration: none;
+        transition: color .2s ease-in-out;
     }
 </style>
 
@@ -157,7 +158,7 @@
             if (i == 0 || (i > 0 && Chat.Messages[i - 1].DispatchTime.Date != Chat.Messages[i].DispatchTime.Date))
             {
                 <div class="date-marker">
-                    @Chat.Messages[i].DispatchTime.ToLocalTime().ToString("dd MMM")
+                    @ToLocalTime(Chat.Messages[i].DispatchTime).ToString("dd MMM")
                 </div>
             }
             if (i > 0 && Chat.Messages[i].SenderEmail != UserEmail && (Chat.Messages[i - 1].IsRead && !Chat.Messages[i].IsRead))
@@ -172,41 +173,46 @@
                 <div class="message message-system">
                     <div class="message-content">
                         @Chat.Messages[i].Content
-                        <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                        <div class="message-time">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                     </div>
                 </div>
             }
             else if (Chat.Messages[i].SenderEmail == UserEmail)
             {
-                if ((i == 0 || (i > 0 && Chat.Messages[i - 1].SenderEmail != Chat.Messages[i].SenderEmail))
+                if ((i == 0 || (i > 0 && (Chat.Messages[i - 1].SenderEmail != Chat.Messages[i].SenderEmail || (Chat.Messages[i].DispatchTime - Chat.Messages[i - 1].DispatchTime).TotalMinutes > 5)))
                     && i + 1 < Chat.Messages.Count 
-                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && (Chat.Messages[i + 1].DispatchTime - Chat.Messages[i].DispatchTime).TotalMinutes <= 5)
                 {
                     <div class="message message-user message-top-user">
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time-user">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
                 else if ((i > 0 && i + 1 < Chat.Messages.Count)
                     && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
-                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && (Chat.Messages[i + 1].DispatchTime - Chat.Messages[i].DispatchTime).TotalMinutes <= 5)
                 {
                     <div class="message message-user message-middle-user">
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time-user">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
                 else if (i > 0 && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
-                    && (i + 1 == Chat.Messages.Count || (i + 1 < Chat.Messages.Count && Chat.Messages[i + 1].SenderEmail != Chat.Messages[i].SenderEmail)))
+                && ((i + 1 == Chat.Messages.Count && (Chat.Messages[i].DispatchTime - Chat.Messages[i - 1].DispatchTime).TotalMinutes <= 5) || (i + 1 < Chat.Messages.Count && (Chat.Messages[i + 1].SenderEmail != Chat.Messages[i].SenderEmail
+                || (
+                (Chat.Messages[i + 1].DispatchTime - Chat.Messages[i].DispatchTime).TotalMinutes > 5
+                && (Chat.Messages[i].DispatchTime - Chat.Messages[i - 1].DispatchTime).TotalMinutes <= 5)))))
                 {
                     <div class="message message-user message-bottom-user">
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time-user">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
@@ -215,43 +221,48 @@
                     <div class="message message-user">
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time-user">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time-user">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
             }
             else
             {
-                if ((i == 0 || (i > 0 && Chat.Messages[i - 1].SenderEmail != Chat.Messages[i].SenderEmail))
+                if ((i == 0 || (i > 0 && (Chat.Messages[i - 1].SenderEmail != Chat.Messages[i].SenderEmail || (Chat.Messages[i].DispatchTime - Chat.Messages[i - 1].DispatchTime).TotalMinutes > 5)))
                     && i + 1 < Chat.Messages.Count
-                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && (Chat.Messages[i + 1].DispatchTime - Chat.Messages[i].DispatchTime).TotalMinutes <= 5)
                 {
                     <div class="message message-top">
                         <span class="message-sender">@Chat.Messages[i].SenderName</span>
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
                 else if ((i > 0 && i + 1 < Chat.Messages.Count)
                     && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
-                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail)
+                    && Chat.Messages[i + 1].SenderEmail == Chat.Messages[i].SenderEmail
+                    && (Chat.Messages[i + 1].DispatchTime - Chat.Messages[i].DispatchTime).TotalMinutes <= 5)
                 {
                     <div class="message message-middle">
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
                 else if (i > 0 && Chat.Messages[i - 1].SenderEmail == Chat.Messages[i].SenderEmail
-                    && (i + 1 == Chat.Messages.Count || (i + 1 < Chat.Messages.Count && Chat.Messages[i + 1].SenderEmail != Chat.Messages[i].SenderEmail)))
+                && ((i + 1 == Chat.Messages.Count && (Chat.Messages[i].DispatchTime - Chat.Messages[i - 1].DispatchTime).TotalMinutes <= 5) || (i + 1 < Chat.Messages.Count && (Chat.Messages[i + 1].SenderEmail != Chat.Messages[i].SenderEmail
+                || (
+                (Chat.Messages[i + 1].DispatchTime - Chat.Messages[i].DispatchTime).TotalMinutes > 5
+                && (Chat.Messages[i].DispatchTime - Chat.Messages[i - 1].DispatchTime).TotalMinutes <= 5)))))
                 {
                     <div class="message message-bottom">
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
@@ -261,7 +272,7 @@
                         <span class="message-sender">@Chat.Messages[i].SenderName</span>
                         <div class="message-content">
                             @Chat.Messages[i].Content
-                            <div class="message-time">@Chat.Messages[i].DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time">@ToLocalTime(Chat.Messages[i].DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     </div>
                 }
@@ -272,14 +283,14 @@
     {
         <div class="message message-system">
             <div class="message-content">
-                This chat is empty, write your first message
+                This chat is empty, send the first message
             </div>
         </div>
     }
 </div>
 <div class="card-footer">
-    <div class="input-group">
-        <input @bind-value="userInput" type="text"  class="form-control user-input" placeholder="Type your message..." />
+    <div style="width: 100%; display: inline-flex;">
+        <input @bind-value="userInput" type="text" class="form-control user-input" placeholder="Message..." />
         <div class="input-group-append">
             <a class="send-button" role="button" @onclick="SendMessage">
                 ➤
@@ -291,6 +302,7 @@
 @code {
     [Parameter] public string UserEmail { get; set; } = null!;
     [Parameter] public Chat Chat { get; set; } = null!;
+    [Parameter] public int TimeZoneOffset { get; set; }
     private string userInput = string.Empty;
     private ElementReference chatContainer;
 
@@ -301,11 +313,13 @@
             await JSRuntime.InvokeVoidAsync("scrollToBottom", chatContainer);
             if (Chat.Messages.Any(m => !m.IsRead && m.SenderEmail != UserEmail))
             {
-                await OnRead?.Invoke(UserEmail, Chat.Id);
+                await OnRead?.Invoke(UserEmail, Chat.ChatId);
                 Chat.Messages.Where(m => !m.IsRead && m.SenderEmail != UserEmail).ToList().ForEach(m => m.IsRead = true);
             }
         }
     }
+
+    private DateTime ToLocalTime(DateTime utcTime) => utcTime.AddMinutes(-TimeZoneOffset);
 
     public async Task SendMessage()
     {
@@ -319,9 +333,11 @@
             IsRead = true
         });
 
-        string receiverEmail = Chat?.InterlocutorsEmails.FirstOrDefault(e => e.Email != UserEmail)?.Email ?? "";
-        await OnSend?.Invoke(userInput, Chat.Id);
+        string receiverEmail = Chat?.InterlocutorsEmails.FirstOrDefault(e => e != UserEmail) ?? "";
+        await OnSend?.Invoke(userInput, Chat.ChatId);
         userInput = string.Empty;
+        await InvokeAsync(StateHasChanged);
+        await JSRuntime.InvokeVoidAsync("scrollToBottom", chatContainer);
     }
 
     public async Task ReceiveMessage(Message message)
@@ -330,14 +346,14 @@
         if (!message.IsRead)
         {
             message.IsRead = true;
-            readTask = OnRead?.Invoke(UserEmail, Chat.Id);
+            readTask = OnRead?.Invoke(UserEmail, Chat.ChatId);
         }
         Chat.Messages.Add(message);
+        if (readTask != null) await readTask;
         await InvokeAsync(StateHasChanged);
         await JSRuntime.InvokeVoidAsync("scrollToBottom", chatContainer);
-        if (readTask != null) await readTask;
     }
 
-    [Parameter] public Func<string, int, Task>? OnSend { get; set; }
-    [Parameter] public Func<string, int, Task>? OnRead { get; set; }
+    [Parameter] public Func<string, long, Task>? OnSend { get; set; }
+    [Parameter] public Func<string, long, Task>? OnRead { get; set; }
 }

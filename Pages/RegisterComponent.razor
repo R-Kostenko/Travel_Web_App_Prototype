@@ -1,87 +1,129 @@
-﻿@page "/register";
-@using Travel_App_Web.Models
-@using Travel_App_Web.Services
+﻿@using Hangfire;
+@using Models
+@using Services
+@using Services.Mail
 @using System.Net
 @using System.Net.Http.Json
 @inject HttpClient HttpClient
 @inject NavigationManager NavigationManager
 @inject UserStateService UserStateService
+@inject EmailSenderService EmailSender
 
-<PageTitle>Registration</PageTitle>
+<style>
+    .link {
+        color: blueviolet;
+        text-decoration: underline;
+        cursor: pointer;
+        transition: color 0.3s ease;
+    }
+
+        .link:hover {
+            color: darkblue;
+        }
+
+    .form-container {
+        width: 100%;
+        display: inline-flex;
+    }
+
+        .form-container div:not(:first-child) {
+            margin-left: 10px;
+        }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
 
 <EditForm EditContext=editContext OnValidSubmit=RegisterAsync>
-    <div class="card">
-        <div class="card-body">
-            <h4 class="card-title" style="max-width: 300px;">Registration</h4>
-
-            <div class="mb-3">
-                <label for="inputFirstName" class="form-label">First Name*</label>
-                <div>
-                    <InputText @bind-Value="model.FirstName" @oninput="CheckValidation" class="form-control" id="inputFirstName" />
-                    <ValidationMessage For="() => model.FirstName" class="text-danger" />
+    <div class="logreg-container" style="border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+        <div class="card">
+            <div class="card-body" style="width: 600px; padding: 30px;">
+                <div class="mb-3 form-container">
+                    <div style="width: 49%;">
+                        <label for="inputFirstName" class="form-label">First name*</label>
+                        <InputText @bind-Value="model.FirstName" @oninput="CheckValidation" class="form-control" id="inputFirstName" placeholder="John" />
+                        <ValidationMessage For="() => model.FirstName" class="text-danger" />
+                    </div>                    
+                    <div style="width: 49%;">
+                        <label for="inputLastName" class="form-label">Last name*</label>
+                        <InputText @bind-Value="model.LastName" @oninput="CheckValidation" class="form-control" id="inputLastName" placeholder="Doe" />
+                        <ValidationMessage For="() => model.LastName" class="text-danger" />
+                    </div>
                 </div>
-            </div>
 
-            <div class="mb-3">
-                <label for="inputMiddleName" class="form-label">Middle Name</label>
-                <div>
-                    <InputText @bind-Value="model.MiddleName" @oninput="CheckValidation" class="form-control" id="inputMiddleName" />
-                    <ValidationMessage For="() => model.MiddleName" class="text-danger" />
+                <div class="mb-3 form-container">
+                    <div style="width: 49%;">
+                        <label for="inputMiddleName" class="form-label" style="font-weight: 400;">Middle name</label>
+                        <InputText @bind-Value="model.MiddleName" @oninput="CheckValidation" class="form-control" id="inputMiddleName" />
+                        <ValidationMessage For="() => model.MiddleName" class="text-danger" />
+                    </div>
+                    <div>
+                        <label for="inputGender" class="form-label">Gender*</label>
+                        <select @bind="model.Gender" @oninput="CheckValidation" class="form-select" id="inputGender">
+                            @foreach (var gender in Enum.GetValues(typeof(Gender)))
+                            {
+                                var enumValue = (Gender)gender;
+                                <option value="@enumValue">@enumValue.GetEnumMemberValue()</option>
+                            }
+                        </select>
+                        <ValidationMessage For="() => model.Gender" class="text-danger" />
+                    </div>
                 </div>
-            </div>
 
-            <div class="mb-3">
-                <label for="inputLastName" class="form-label">Last Name*</label>
-                <div>
-                    <InputText @bind-Value="model.LastName" @oninput="CheckValidation" class="form-control" id="inputLastName" />
-                    <ValidationMessage For="() => model.LastName" class="text-danger" />
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label for="inputEmail" class="form-label">Email*</label>
-                <div>
-                    <InputText @bind-Value="model.Email" @oninput="CheckValidation" class="form-control" id="inputEmail" />
+                <div class="mb-3" style="width: 100%;">
+                    <label for="inputEmail" class="form-label">Email*</label>
+                    <InputText @bind-Value="model.Email" @oninput="CheckValidation" class="form-control" id="inputEmail" placeholder="example@gmail.com" />
                     <ValidationMessage For="() => model.Email" class="text-danger" />
                 </div>
-            </div>
 
-            <div class="mb-3">
-                <label for="inputPhone" class="form-label">Phone*</label>
-                <div>
-                    <InputText @bind-Value="model.Phone" @oninput="CheckValidation" class="form-control" id="inputPhone" />
+                <div class="mb-3" style="width: 100%;">
+                    <label for="inputPhone" class="form-label">Phone*</label>
+                    <InputText @bind-Value="model.Phone" @oninput="CheckValidation" class="form-control" id="inputPhone" placeholder="+380961234567" />
                     <ValidationMessage For="() => model.Phone" class="text-danger" />
                 </div>
-            </div>
 
-            <div class="mb-3">
-                <label for="inputPassword" class="form-label">Password*</label>
-                <div>
-                    <InputText @bind-Value="model.Password" @oninput="CheckValidation" type="password" class="form-control" id="inputPassword" />
-                    <ValidationMessage For="() => model.Password" class="text-danger" />
+                <div class="mb-3 form-container">
+                    <div>
+                        <label for="inputBirthDate" class="form-label">Date of birth*</label>
+                        <InputDate id="inputBirthDate" @bind-Value="model.DateOfBirth" @onblur="CheckValidation" class="form-control" min="@DateTime.Today.AddYears(-80).ToString("yyyy-MM-dd")" max="@DateTime.Today.AddYears(-6).ToString("yyyy-MM-dd")" />
+                        <ValidationMessage For="@(() => model.DateOfBirth)" />
+                    </div>
+                    <div>
+                        <label for="countries" class="form-label" style="width: 100%;">Country*</label>
+                        <CountryComponent Country="@model.Country" ResponseMessage="@responseMessage" OnUpdate="UpdateCountry" />
+                    </div>
+                </div>
+
+                <div class="mb-3 form-container">
+                    <div style="width: 49%;">
+                        <label for="inputPassword" class="form-label">Password*</label>
+                        <InputText @bind-Value="model.Password" @oninput="CheckValidation" type="password" class="form-control" id="inputPassword" />
+                        <ValidationMessage For="() => model.Password" class="text-danger" />
+                    </div>
+                    <div style="width: 49%;">
+                        <label for="inputConfirmPassword" class="form-label">Confirm your password*</label>
+                        <InputText @bind-Value="model.ConfirmPassword" @onblur="CheckValidation" type="password" class="form-control" id="inputConfirmPassword" />
+                        <ValidationMessage For="() => model.ConfirmPassword" class="text-danger" />
+                    </div>
+                </div>
+
+                <DataAnnotationsValidator />
+
+                <div class="mb-2" style="margin-top: 20px; width: 100%; display: inline-flex; justify-content: center; align-items: center;">
+                    <button class="primary-btn" type="Submit">
+                        Sign up
+                    </button>
+                    <button class="secondary-btn" @onclick="OnExit">
+                        Cancel
+                    </button>
+                </div>
+                <div style="width: 100%; display: inline-flex; justify-content: center;">
+                    <p class="text-muted" style="margin: 0;">Return to <a class="link" @onclick="OnLogin">Login</a>.</p>
                 </div>
             </div>
-
-            <div class="mb-3">
-                <label for="inputConfirmPassword" class="form-label">Confirm password*</label>
-                <div>
-                    <InputText @bind-Value="model.ConfirmPassword" @onblur="CheckValidation" type="password" class="form-control" id="inputConfirmPassword" />
-                    <ValidationMessage For="() => model.ConfirmPassword" class="text-danger" />
-                </div>
-            </div>
-
-            <p class="mt-3" style="max-width: 300px;">@responseMessage</p>
-
-            <button class="btn btn-warning" type="Submit" disabled="@(!isFormValid)">
-                Register
-            </button>
-
-            @*<button class="btn btn-secondary" @onclick="OnExit">
-                Cancel
-            </button>*@
-
-            <DataAnnotationsValidator />
-        </div>        
+        </div>
     </div>
 </EditForm>
 
@@ -93,7 +135,21 @@
     bool isFormValid;
     User? user = null;
 
-    async Task RegisterAsync()
+    protected override void OnInitialized()
+    {
+        model = new();
+        editContext = new(model);
+        isFormValid = false;
+    }
+
+    private void UpdateCountry(Country? country, string message)
+    {
+        model.Country = country;
+        responseMessage = message;
+        StateHasChanged();
+    }
+
+    private async Task RegisterAsync()
     {
         responseMessage = string.Empty;
         if (!editContext.Validate())
@@ -106,10 +162,13 @@
 
         if (response.IsSuccessStatusCode)
         {
-            responseMessage = "You have successfully registered!";
+            responseMessage = "<h5 style=\"color: green\">You have successfully registered<h5>";
             StateHasChanged();
             user = await response.Content.ReadFromJsonAsync<User>();
-            await Task.Delay(2000);
+            user.Country = model.Country;
+
+            BackgroundJob.Enqueue(() => SendRegisterSuccessfulEmailAsync());
+
             UserStateService.Update(user);
             await OnExit.InvokeAsync();
         }
@@ -119,7 +178,7 @@
         }
         else
         {
-            responseMessage = "An error occurred!";
+            responseMessage = "An error occurred";
         }
 
         StateHasChanged();
@@ -131,14 +190,19 @@
         StateHasChanged();
     }
 
-
-    protected override void OnInitialized()
+    private async Task SendRegisterSuccessfulEmailAsync()
     {
-        model = new();
-        editContext = new(model);
-        isFormValid = false;
+        try
+        {
+            var model = new RegistrationNotificationModel { Name = user.FirstName };
+            await EmailSender.SendEmailAsync(user.Email, "Registration is successful", "EmailTemplates/RegistrationNotification.cshtml", model);
+        }
+        catch (Exception ex)
+        {
+            string mess = ex.Message;
+        }
     }
 
     [Parameter] public EventCallback OnExit { get; set; }
-    //[Parameter] public Action<User?> UserChanged { get; set; } = null!;
+    [Parameter] public EventCallback OnLogin { get; set; }
 }

@@ -5,12 +5,38 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>cc880086-bea2-4cfb-b05f-e01c562b483d</UserSecretsId>
+	 <PreserveCompilationContext>true</PreserveCompilationContext>
+	 <MvcRazorCompileOnPublish>false</MvcRazorCompileOnPublish>
+	 <CopyRefAssembliesToPublishDirectory>true</CopyRefAssembliesToPublishDirectory>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="wwwroot\EmailTemplates\BookingRequestNotification.cshtml.cs" />
+    <Compile Include="wwwroot\EmailTemplates\FeedbackRequestNotification.cshtml.cs" />
+    <Compile Include="wwwroot\EmailTemplates\RegistrationNotification.cshtml.cs" />
+    <Compile Include="wwwroot\EmailTemplates\TourRegistrationNotification.cshtml.cs" />
+    <Compile Include="wwwroot\EmailTemplates\UnsubcribeFromTourNotification.cshtml.cs" />
+    <Compile Include="wwwroot\EmailTemplates\UpcomingTourNotification.cshtml.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="amadeus-dotnet" Version="2.0.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.3.0" />
+    <PackageReference Include="Azure.Storage.Files.Shares" Version="12.1.0" />
+    <PackageReference Include="Azure.Storage.Queues" Version="12.2.0" />
+    <PackageReference Include="FluentEmail.Core" Version="3.0.2" />
+    <PackageReference Include="FluentEmail.Razor" Version="3.0.2" />
+    <PackageReference Include="FluentEmail.Smtp" Version="3.0.2" />
+    <PackageReference Include="GoogleApi" Version="5.4.0" />
+    <PackageReference Include="Hangfire" Version="1.8.12" />
+    <PackageReference Include="Hangfire.SqlServer" Version="1.8.12" />
+    <PackageReference Include="Innofactor.EfCoreJsonValueConverter" Version="6.0.0" />
+    <PackageReference Include="IsoNames.NETStandard" Version="1.2.1" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="7.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="7.0.14" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="7.0.15" />
+    <PackageReference Include="Microsoft.Azure.SignalR" Version="1.4.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="7.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="7.0.14">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -20,6 +46,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Azure" Version="1.0.0" />
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="7.0.11" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.0.2" />
@@ -27,7 +54,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="wwwroot\images\" />
+    <Folder Include="Migrations\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="wwwroot\EmailTemplates\BookingRequestNotification.cshtml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\EmailTemplates\FeedbackRequestNotification.cshtml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\EmailTemplates\RegistrationNotification.cshtml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\EmailTemplates\TourRegistrationNotification.cshtml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\EmailTemplates\UnsubcribeFromTourNotification.cshtml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="wwwroot\EmailTemplates\UpcomingTourNotification.cshtml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

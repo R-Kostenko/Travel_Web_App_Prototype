@@ -1,0 +1,23 @@
+﻿@using Services.Mail
+@model TourRegistrationNotificationModel
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Tour Registration</title>
+    </head>
+    <body>
+        <h2>Welcome, @Model.Name!</h2>
+        <p>You have successfully registered for the tour "@Model.TourName".</p>
+        <p>Price: @Model.Price</p>
+        <p>Start Date: @Model.StartDate</p>
+        <p>Agency: @Model.AgencyName</p>
+        <p>Agency Contact Information: @Model.AgencyContact</p>
+        <p>Manager Contact Information: @foreach (var manager in Model.Managers)
+            {
+                <br />@manager
+            } </p>
+    </body>
+</html>

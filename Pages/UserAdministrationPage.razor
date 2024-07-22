@@ -1,0 +1,160 @@
+﻿@page "/user-administration"
+@using Microsoft.EntityFrameworkCore;
+@using Models
+@using Services
+@using Services.Mail
+@using System.Net
+@using System.Net.Http.Json
+@using Travel_App_Web.Data;
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
+@inject DBContext DBContext
+
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<div style="width: 100%; display: flex; justify-content: center; text-align: center;">
+    <div class="logreg-container" style="z-index: 1; border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+        <div class="card">
+            <div class="card-body" style="width: fit-content; padding: 30px;">
+                
+                <h4 class="mb-4" style="width: 100%; text-align: center; margin-bottom: 20px;">
+                    User administration
+                </h4>
+
+                <div style="display: inline-flex; align-items: center; margin-bottom: 15px;">
+                    <InputText @bind-Value="searchStr" class="form-control" placeholder="Enter part of a name or email" />
+                    <button class="btn btn-warning" style="margin-left: 20px; display:flex; align-items: center; height: 34.5px; width: 34.5px; border-radius: 20px; justify-content: center;" @onclick="SearchUsers">
+                        🔍
+                    </button>
+                </div>
+
+                <div>
+                    @if (users.Count > 0)
+                    {
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Email</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Role</th>
+                                    <th scope="col"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var user in users)
+                                {
+                                    var userEmail = user.Email;
+                                    string userRoleName = user.Role.RoleName;
+
+                                    <tr style="width: 100%; height: 50px;">
+                                        <td style="padding-left: 10px; padding-right: 10px;">
+                                            <h6 style="margin: 8px 0 0 0;">@user.Email</h6>
+                                        </td>
+                                        <td style="padding-left: 10px; padding-right: 10px;">
+                                            <h6 style="margin: 8px 0 0 0;">@user.LastName @user.FirstName @user.MiddleName</h6>
+                                        </td>
+                                        <td style="padding-left: 10px; padding-right: 10px;">
+                                            <select style="width: fit-content;" @bind="userRoleName" @oninput="async (args) => await RoleUpdate(args, userEmail)" class="form-select">
+                                                @foreach (var role in roles)
+                                                {
+                                                    <option value="@role.RoleName">@role.RoleName</option>
+                                                }
+                                            </select>
+                                        </td>
+                                        <td style="padding-left: 10px; padding-right: 10px;">
+                                            <button class="secondary-btn" @onclick="async() => await DeleteAsync(userEmail)">
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    List<Role> roles { get; set; } = new();
+    List<User> users { get; set; } = new();
+    private string searchStr { get; set; } = string.Empty;
+    string responseMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("");
+        UserStateService.OnUserUpdate += async (user) =>
+        {
+            await Task.Run(() =>
+            {
+                if (user is null)
+                    NavigationManager.NavigateTo("");
+            });
+        };
+
+        if (UserStateService.User is null)
+        {
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+        else if (UserStateService.User.Role.RoleName != "Admin")
+            NavigationManager.NavigateTo("");
+
+        roles = await DBContext.Roles.ToListAsync();
+    }
+
+    private async Task SearchUsers()
+    {
+        if (string.IsNullOrEmpty(searchStr))
+            return;
+
+        users = await DBContext.Users.Include(u => u.Role).Where(u => u.Email.Contains(searchStr) || u.FirstName.Contains(searchStr) || u.LastName.Contains(searchStr) || (u.MiddleName != null && u.MiddleName.Contains(searchStr))).ToListAsync();
+    }
+    private async Task RoleUpdate(ChangeEventArgs args, string userEmail)
+    {
+        Role role = roles.First(r => r.RoleName == (string)args.Value);
+
+        var user = await DBContext.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == userEmail);
+
+        try
+        {
+            if (user != null && user.Role.RoleId != role.RoleId)
+            {
+                user.Role = role;
+                await DBContext.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+    }
+    private async Task DeleteAsync(string userEmail)
+    {
+        var response = await HttpClient.GetAsync(NavigationManager.BaseUri + $"account/delete/{userEmail}");
+
+        if (response.IsSuccessStatusCode)
+        {
+            responseMessage = "You have successfully deleted a user";
+            await InvokeAsync(StateHasChanged);
+        }
+        else if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            responseMessage = await response.Content.ReadAsStringAsync();
+        }
+        else
+        {
+            responseMessage = "An error occurred";
+        }
+    }
+}

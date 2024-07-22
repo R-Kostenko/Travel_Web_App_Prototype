@@ -1,12 +1,12 @@
-﻿using Microsoft.AspNetCore.SignalR;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.IdentityModel.Tokens;
+using Models;
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using Travel_App_Web.Data;
-using Travel_App_Web.Models;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Travel_App_Web.SignalR
 {
@@ -19,8 +19,8 @@ namespace Travel_App_Web.SignalR
         private static readonly ActiveChatList _activeChats = new();
         private sealed class ActiveChatList
         {
-            private readonly List<Chat> _activeChats = new List<Chat>();
-            private readonly object _lock = new object();
+            private readonly List<Chat> _activeChats = new();
+            private readonly object _lock = new();
 
             public void AddChat(Chat chat)
             {
@@ -30,24 +30,17 @@ namespace Travel_App_Web.SignalR
                 }
             }
 
-            public void RemoveChatById(int Id)
+            public void RemoveChatById(long Id)
             {
                 lock (_lock)
                 {
-                    _activeChats.RemoveAll(c => c.Id == Id);
+                    _activeChats.RemoveAll(c => c.ChatId == Id);
                 }
             }
 
-            public bool ContainsChatById(int id)
-            {
-                return _activeChats.Exists(c => c.Id == id);
-            }
+            public bool ContainsChatById(long id) => _activeChats.Exists(c => c.ChatId == id);
 
-            public Chat? Find(Predicate<Chat> match)
-            {
-                return _activeChats.Find(match);
-
-            }
+            public Chat? Find(Predicate<Chat> match) => _activeChats.Find(match);
         }
 
         public ChatHub(DBContext dbContext) : base()
@@ -77,15 +70,14 @@ namespace Travel_App_Web.SignalR
                 {
                     var userChats = _dbContext.Chats?
                         .Include(chat => chat.Messages)
-                        .Include(chat => chat.InterlocutorsEmails)
-                        .Where(chat => chat.InterlocutorsEmails.Any(einfo => einfo.Email == userEmail))
+                        .Where(chat => chat.Emails.Contains(userEmail))
                         .ToList();
 
                     if (!userChats.IsNullOrEmpty())
                     {
                         foreach (var chat in userChats)
                         {
-                            if (!_activeChats.ContainsChatById(chat.Id))
+                            if (!_activeChats.ContainsChatById(chat.ChatId))
                             {
                                 _activeChats.AddChat(chat);
                             }
@@ -107,9 +99,10 @@ namespace Travel_App_Web.SignalR
             {
                 var admin = await _dbContext.Users
                     .Include(user => user.Role)
-                    .Include(a => a.Chats)
+                    .Include(user => user.Chats)
                     .ThenInclude(chat => chat.Messages)
-                    .FirstOrDefaultAsync(a => a.Email == userEmail);
+                    .AsSplitQuery()
+                    .FirstOrDefaultAsync(user => user.Email == userEmail);
 
                 if (_serviceQueue.TryDequeue(out var value))
                 {
@@ -117,28 +110,12 @@ namespace Travel_App_Web.SignalR
 
                     if (client != null && admin != null)
                     {
-                        EmailInfo? clientEmail = await _dbContext.Emails.FindAsync(client.Email);
-                        if (clientEmail is null)
-                        {
-                            clientEmail = new EmailInfo() { Email = client.Email };
-                            _dbContext.Emails.Add(clientEmail);
-                            _dbContext.SaveChanges();
-                        }
-
-                        EmailInfo? adminEmail = await _dbContext.Emails.FindAsync(admin.Email);
-                        if (adminEmail is null)
-                        {
-                            adminEmail = new EmailInfo() { Email = admin.Email };
-                            _dbContext.Emails.Add(adminEmail);
-                            _dbContext.SaveChanges();
-                        }
-
                         var chat = new Chat()
                         {
                             InterlocutorsEmails = new() {
-                                clientEmail,
-                                adminEmail
-                            },
+                                client.Email,
+                                admin.Email
+                            }
                         };
                         var messageObj = new Message()
                         {
@@ -155,9 +132,7 @@ namespace Travel_App_Web.SignalR
                         {
                             chat = await _dbContext.Chats
                                 .Include(c => c.Messages)
-                                .Include(c => c.InterlocutorsEmails)
-                                .FirstOrDefaultAsync(c => c.InterlocutorsEmails.Any(e => e.Email == admin.Email)
-                                    && c.InterlocutorsEmails.Any(e => e.Email == client.Email));
+                                .FirstOrDefaultAsync(c => c.Emails.Contains(admin.Email) && c.Emails.Contains(client.Email));
 
                             if (chat != null)
                             {
@@ -179,8 +154,13 @@ namespace Travel_App_Web.SignalR
                                 }
 
                                 _activeChats.AddChat(chat);
-                                await Clients.User(client.Email).SendAsync("ReceiveMessage", chat.Id, messageObj);
-                                await Clients.User(admin.Email).SendAsync("ReceiveMessage", chat.Id, messageObj);
+
+                                List<Task> sendTasks = new()
+                                {
+                                    Clients.User(client.Email).SendAsync("ReceiveMessage", chat.ChatId, messageObj),
+                                    Clients.User(admin.Email).SendAsync("ReceiveMessage", chat.ChatId, messageObj)
+                                };
+                                await Task.WhenAll(sendTasks);
                             }
                         }
                         catch (Exception ex)
@@ -201,9 +181,8 @@ namespace Travel_App_Web.SignalR
             }
 
             var userChats = await _dbContext.Chats?
-                .Include(chat => chat.InterlocutorsEmails)
                 .Include(chat => chat.Messages)
-                .Where(chat => chat.InterlocutorsEmails.Any(einfo => einfo.Email == userEmail))
+                .Where(chat => chat.Emails.Contains(userEmail))
                 .AsSplitQuery()
                 .ToListAsync();
 
@@ -218,10 +197,10 @@ namespace Travel_App_Web.SignalR
         private void ProcessChatsToRemoveAsync(List<Chat> userChats, string userEmail)
         {
             var chatsIdToRemove = userChats
-                .Where(userChat => _activeChats.ContainsChatById(userChat.Id) &&
-                    !userChat.InterlocutorsEmails.Where(einfo => einfo.Email != userEmail)
-                        .Any(einfo => _usersOnline.ContainsKey(einfo.Email)))
-                .Select(chat => chat.Id)
+                .Where(userChat => _activeChats.ContainsChatById(userChat.ChatId) &&
+                    !userChat.InterlocutorsEmails.Where(e => e != userEmail)
+                        .Any(e => _usersOnline.ContainsKey(e)))
+                .Select(chat => chat.ChatId)
                 .ToList();
 
             foreach (var chatIdToRemove in chatsIdToRemove)
@@ -238,6 +217,7 @@ namespace Travel_App_Web.SignalR
                     .Include(user => user.Role)
                     .Include(user => user.Chats)
                     .ThenInclude(chat => chat.Messages)
+                    .AsSplitQuery()
                     .FirstOrDefault(user => user.Email == Context.User.Identity.Name);
                 
                 if (user != null)
@@ -246,7 +226,7 @@ namespace Travel_App_Web.SignalR
                     {
                         if (tuple.Item1.Email == user.Email)
                         {
-                            message = "You are already in the queue for service";
+                            message = "Your message is already in the queue for service";
                             await Clients.User(user.Email).SendAsync("ReceiveMessage", chatId, new Message()
                             {
                                 Content = message,
@@ -268,15 +248,17 @@ namespace Travel_App_Web.SignalR
                                 .ThenInclude(chat => chat.Messages)
                                 .Include(user => user.Role)
                                 .Where(user => adminsId.Contains(user.Email))
-                                .OrderBy(admin => admin.Chats.Count).FirstAsync();
+                                .OrderBy(admin => admin.Chats.Count)
+                                .AsSplitQuery()
+                                .FirstAsync();
 
                             await ProcessAdminServiceAsync(admin.Email);
                         }
                     }
                     else
                     {
-                        message = "Unfortunately, we don't have any online administrators at the moment. " +
-                            "Your message has been queued and will be processed when an administrator is connected.";
+                        message = "Unfortunately, we do not have online administrators at the moment. " +
+                            "Your message has been queued and will be processed when the administrator connects.";
                         await Clients.User(user.Email).SendAsync("ReceiveMessage", chatId, new Message()
                         {
                             Content = message,
@@ -288,7 +270,7 @@ namespace Travel_App_Web.SignalR
             }
             else
             {
-                var chat = _activeChats.Find(chat => chat.Id == chatId);
+                var chat = _activeChats.Find(chat => chat.ChatId == chatId);
 
                 if (chat != null)
                 {
@@ -310,17 +292,20 @@ namespace Travel_App_Web.SignalR
                     {
                         string mess = ex.Message;
                     }
-                    foreach (var userEmail in chat.InterlocutorsEmails.Where(e => e.Email != messageObj.SenderEmail))
+
+                    List<Task> sendTasks = new();
+                    foreach (var userEmail in chat.InterlocutorsEmails.Where(e => e != messageObj.SenderEmail))
                     {
-                        await Clients.User(userEmail.Email).SendAsync("ReceiveMessage", chat.Id, messageObj);
+                        sendTasks.Add(Clients.User(userEmail).SendAsync("ReceiveMessage", chat.ChatId, messageObj));
                     }
+                    await Task.WhenAll(sendTasks);
                 }
             }
         }
 
         public async Task ReadSet(string userEmail, int chatId)
         {
-            var chat = _activeChats.Find(c => c.Id == chatId);
+            var chat = _activeChats.Find(c => c.ChatId == chatId);
             if (chat != null)
             {
                 _dbContext.Attach(chat);

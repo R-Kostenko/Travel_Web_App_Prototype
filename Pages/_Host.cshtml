@@ -13,8 +13,11 @@
     <link href="css/site.css" rel="stylesheet" />
     <link href="Travel_App_Web.styles.css" rel="stylesheet" />
     <link rel="icon" type="image/png" href="favicon.png"/>
+    @*<link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@100..800&display=swap" rel="stylesheet">*@
     <component type="typeof(HeadOutlet)" render-mode="ServerPrerendered" />
-    <script src="~/JSFunctions.js"></script>
+    @*<script src="~/JSFunctions.js"></script>*@
 </head>
 <body>
     <component type="typeof(App)" render-mode="ServerPrerendered" />
@@ -31,5 +34,52 @@
     </div>
 
     <script src="_framework/blazor.server.js"></script>
+    <script>
+        function scrollTo(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        }
+
+
+        function getTimeZoneOffset() {
+            return new Date().getTimezoneOffset();
+        }
+
+        function getTimeZoneId() {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone;
+        }
+
+        function scrollToBottom(element) {
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function getScrollPosition(elementId) {
+            let element = document.getElementById(elementId);
+            let scrollbarWidth = element.offsetWidth - element.clientWidth;
+            return {
+                scrollPosition: Math.round(element.scrollTop),
+                scrollbarWidth: Math.round(scrollbarWidth)
+            };
+        }
+
+        function getElementWidth(elementId) {
+            let element = document.getElementById(elementId);
+            return element.offsetWidth;
+        }
+
+        function getNavItemsWidth() {
+            let totalWidth = 0;
+            document.querySelectorAll('.nav-item').forEach(function (el) {
+                totalWidth += el.offsetWidth;
+            });
+
+            return totalWidth;
+        }
+    </script>
 </body>
 </html>

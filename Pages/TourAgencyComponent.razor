@@ -1,0 +1,315 @@
+﻿@using System.Globalization;
+@using Newtonsoft.Json;
+@using System.Text;
+@using Models;
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+
+<style>
+    .phone-numbers-list {
+        display: inline-flex;
+        flex-direction: row;
+    }
+
+    .phone-numbers-item {
+        display: inline-flex;
+        align-self: center;
+        background-color: limegreen;
+        border-radius: 15px;
+        margin: 5px;
+        padding: 4px 5px;
+        font-size: 16px;
+        align-items: baseline;
+    }
+    
+    .phone-suffix-field {
+        padding: 1px 4px;
+        width: 60px;
+        margin: 0 2px;
+    }
+    
+    .phone-number-field {
+        padding: 1px 4px;
+        width: 100px;
+        margin: 0 2px;
+    }
+</style>
+
+<EditForm EditContext=editContext>
+    <div class="overlay">
+        <div class="logreg-container">
+            @if (!string.IsNullOrEmpty(responseMessage))
+            {
+                <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+            }
+
+            <div class="card">
+                <div class="card-body" style="max-width: 400px; padding: 20px;">
+                    <h4 class="card-title">Travel Agency</h4>
+
+                    <div class="mb-3">
+                        <label for="inputTitle" class="form-label">Name*</label>
+                        <div>
+                            <InputText @bind-Value="Agency.Name" class="form-control" id="inputTitle" />
+                            <ValidationMessage For="() => Agency.Name" class="text-danger" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="countries" class="form-label">Country of head office*</label>
+                        <CountryComponent Country="@Agency.Country" ResponseMessage="@responseMessage" OnUpdate="UpdateCountry" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="inputEmail" class="form-label">Email*</label>
+                        <div>
+                            <InputText @bind-Value="Agency.Email" class="form-control" id="inputEmail" placeholder="example@gmail.com" />
+                            <ValidationMessage For="() => Agency.Email" class="text-danger" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="inputPhoneNumbers" class="form-label">Phone numbers*</label>
+                        <div class="phone-numbers-list">
+                            @if (Agency.Country is null)
+                            {
+                                <span class="text-danger">Select the country of your headquarters</span>
+                            }
+                            else
+                            {
+                                foreach (var number in Agency.PhoneNumbers)
+                                {
+                                    <div class="phone-numbers-item">
+                                        @number <span style="cursor: pointer;" @onclick="() => Agency.PhoneNumbers.Remove(number)">✖</span>
+                                    </div>
+                                }
+                                <div class="phone-numbers-item">
+                                    <span>@Agency.Country.IDD.Root</span>
+                                    <input id="suffixes" @bind="phoneSuffix" class="form-control phone-suffix-field" list="suffixesList" />
+                                    <datalist id="suffixesList">
+                                        @foreach (var suffix in Agency.Country.IDD.Suffixes)
+                                        {
+                                            <option value="@suffix"></option>
+                                        }
+                                    </datalist>
+                                    <InputText @onblur="AddPhoneNumber" @bind-Value="phoneNumber" class="form-control phone-number-field" id="inputPhoneNumbers" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="inputEmail" class="form-label">Credit card</label>
+                        <div>
+                            <input title="Card Number" @oninput="FormatNumberInput" @bind-value="cardNumber" class="form-control" style="border-radius: 10px 10px 0 0;border-bottom: 0;" id="inputCardNumber" placeholder="0000 0000 0000 0000" />
+                            <div style="display: inline-flex;">
+                                <input title="Expiry Date" @oninput="FormatDateInput" @bind-value="cardExpiryDateStr" class="form-control" style="border-radius: 0 0 0 10px;" id="inputCardExpiryDate" placeholder="MM/YY" />
+                                <select @bind="selectedVendor" class="form-select" style="border-radius: 0 0 10px 0; border-left: 0;">
+                                    @foreach (var vendor in Enum.GetValues(typeof(VendorCodes)))
+                                    {
+                                        var enumValue = (VendorCodes)vendor;
+                                        <option value="@enumValue">@enumValue.GetEnumMemberValue()</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-2" style="margin-top: 20px; width: 100%; display: inline-flex; justify-content: center; align-items: center;">
+                        <button class="primary-btn" type="submit" @onclick="async () => await CheckFields()">
+                            Create
+                        </button>
+                        <button class="secondary-btn" @onclick="() => { InvokeAsync(() => OnExit(null)); }">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter]
+    public TourAgency? Agency { get; set; }
+    private EditContext editContext;
+    private string numberInput = string.Empty;
+    private string phoneSuffix = string.Empty;
+    private string phoneNumber = string.Empty;
+    private string cardNumber = string.Empty;
+    private string cardExpiryDateStr = string.Empty;
+    private DateTime cardExpiryDate;
+    private VendorCodes selectedVendor = VendorCodes.CA;
+    private bool manualCheck = false;
+    private string responseMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Agency ??= new();
+        editContext = new(Agency);
+    }
+
+    private void UpdateCountry(Country? country, string message)
+    {
+        if (Agency != null)
+            Agency.Country = country;
+
+        responseMessage = message;
+        StateHasChanged();
+    }
+
+    private void AddPhoneNumber()
+    {
+        if (string.IsNullOrEmpty(phoneSuffix) || string.IsNullOrEmpty(phoneNumber) || phoneSuffix.Any(c => !char.IsDigit(c)) 
+            || phoneNumber.Any(c => !char.IsDigit(c)) || phoneNumber.Length < 6)
+        {
+            phoneNumber = string.Empty;
+            return;
+        }
+
+        string number = Agency.Country.IDD.Root + phoneSuffix + phoneNumber;
+        if (Agency.PhoneNumbers.Contains(number))
+            return;
+        Agency.PhoneNumbers.Add(number);
+        phoneNumber = string.Empty;
+    }
+
+    private void FormatNumberInput(ChangeEventArgs args)
+    {
+        string inputText = args.Value.ToString();
+
+        string digitsOnly = new string(inputText.Where(char.IsDigit).ToArray());
+        if (digitsOnly.Length > 16)
+            return;
+
+        StringBuilder formattedText = new StringBuilder();
+        for (int i = 0; i < digitsOnly.Length; i++)
+        {
+            if (i > 0 && i % 4 == 0)
+            {
+                formattedText.Append(" ");
+            }
+            formattedText.Append(digitsOnly[i]);
+        }
+
+        cardNumber = formattedText.ToString();
+    }
+    private void FormatDateInput(ChangeEventArgs args)
+    {
+        string inputText = args.Value.ToString();
+
+        string digitsOnly = new string(inputText.Where(char.IsDigit).ToArray());
+        if (digitsOnly.Length > 5)
+            return;
+
+        StringBuilder formattedText = new StringBuilder();
+        for (int i = 0; i < digitsOnly.Length; i++)
+        {
+            if (i > 0 && i % 2 == 0)
+            {
+                formattedText.Append("/");
+            }
+            formattedText.Append(digitsOnly[i]);
+        }
+
+        cardExpiryDateStr = formattedText.ToString();
+    }
+
+    private async Task CheckFields()
+    {
+        responseMessage = string.Empty;
+        manualCheck = true;
+
+        if (string.IsNullOrEmpty(Agency.Name))
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "Invalid agency name" : "\nInvalid agency name";
+            manualCheck = false;
+        }
+
+        if (Agency.Country is null)
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "Select a country" : "\nSelect a country";
+            manualCheck = false;
+        }
+
+        if (Agency.PhoneNumbers.Count == 0)
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "Contact person(s) phone number(s)" : "\nContact person(s) phone number(s)";
+            manualCheck = false;
+        }
+
+        if (cardNumber.Length < 19 || cardNumber.Replace(" ", "").Any(c => !char.IsDigit(c)))
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "Invalid card number" : "\nInvalid card number";
+            manualCheck = false;
+        }
+
+        if (cardExpiryDateStr.Length < 5 || cardExpiryDateStr.Replace("/", "").Any(c => !char.IsDigit(c)))
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "Invalid card expiry date" : "\nInvalid card expiry date";
+            manualCheck = false;
+        }        
+        if (!DateTime.TryParseExact(cardExpiryDateStr, "MM/yy", CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out cardExpiryDate)
+            || cardExpiryDate < DateTime.Now)
+        {
+            responseMessage += string.IsNullOrEmpty(responseMessage) ? "Invalid card expiry date" : "\nInvalid card expiry date";
+            manualCheck = false;
+        }
+
+        if (manualCheck == false) return;
+
+        CreditCard card = new()
+        {
+            Number = cardNumber.Replace(" ", ""),
+            ExpiryDate = cardExpiryDate,
+            VendorCode = selectedVendor
+        };
+        Agency.CreditCard = card;
+
+        if (editContext.Validate())
+            await Register();
+    }
+
+    public async Task Register()
+    {
+        // Sending a POST request to register the travel agency
+        var response = await HttpClient.PostAsJsonAsync<TourAgency>(NavigationManager.BaseUri + "tour/agency/register", Agency);
+
+        if (response.IsSuccessStatusCode)
+        {
+            // Reading the response and getting the travel agency object
+            TourAgency? returnedAgency = await response.Content.ReadFromJsonAsync<TourAgency>();
+            if (returnedAgency != null)
+            {
+                // Displaying a message about successful registration
+                responseMessage = "<h5 style=\"color: green\">The travel agency has been successfully created<h5>";
+                Agency = returnedAgency;
+
+                // Updating the component state
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(1500);
+
+                // Invoking the OnExit method with the new travel agency object
+                await InvokeAsync(() => OnExit(Agency));
+            }
+            else
+            {
+                // Message about unsuccessful registration
+                responseMessage = "The travel agency was not created/found";
+            }
+        }
+        else
+        {
+            // Reading and displaying the error message
+            responseMessage = await response.Content.ReadAsStringAsync();
+
+            // Resetting the credit card object in the agency
+            Agency.CreditCard = new();
+        }
+    }
+
+
+    [Parameter]
+    public Action<TourAgency?> OnExit { get; set; } = null!;
+}

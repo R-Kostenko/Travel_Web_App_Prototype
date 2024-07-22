@@ -1,0 +1,283 @@
+﻿@page "/tours/{RequestString?}"
+@using Models
+@using Services
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
+@inject ScrollService ScrollService
+
+<PageTitle>Tours</PageTitle>
+
+<style>
+    .search-box {
+        position: relative;
+        top: -80px;
+        left: -56px;
+        height: 500px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-image: url('/icons/background2.jpg');
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-position: center;
+        filter: brightness(0.9);
+        overflow: hidden;
+        transition: height .5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+        .search-box.not-on-top {
+            height: 200px;
+        }
+
+    .search {
+        display: inline-flex;
+        border-radius: 23px;
+        box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+        width: 40%;
+    }
+
+        .search > input {
+            width: 100%;
+            padding: 5px 20px;
+            margin: -1px;
+            background-color: rgba(250, 250, 252, 0.6);
+            border: 0;
+            border-right: 1px solid grey;
+        }
+
+        .search > button {
+            border: 0;
+            padding: 10px;
+            background-color: rgba(250, 250, 252, 0.8);
+            transition: all .2s ease-in-out;
+        }
+
+            .search > button:hover {
+                background-color: rgba(250, 250, 252, 0.9);
+            }
+
+    .search-results {
+        padding-top: 0;
+    }
+
+    .update-btn {
+        border-radius: 50%;
+        padding: 0;
+        border: 0;
+        background-color: rgba(255, 255, 255, 0.5);
+        transition: all .2s ease-in-out;
+    }
+
+        .update-btn:hover {
+            background-color: rgba(255, 255, 255, 0.6);
+        }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<div class="search-box@(ScrollData.scrollPosition >= 2 ? " not-on-top" : "")" style="width: calc(100% + 104px);">
+    <div class="search">
+        <input @bind="searchString" />
+        <button type="submit" @onclick="SearchTours"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABUklEQVR4nO2UvUoDURSEv41gk5AmomCeQNIFGxuFVEEfwKfQLW0jqa0stPCnCvoKEkHQB7BRrIKdFgELLVQIrhyZhS2ie25irBxYttjZmXvnzrnwM+aBOlADivwSykAL6AFJ5nkHukBzHPEl4FGCd8AOsAFsASfAs751gNIo4q/AE7AOREM4FeBQJrab6ZBYHiS+4OC3ZNL2GqQ/2Mo9iIAL4A2Y8/zQU+bDYvkODS0qxlHFRAcagikd+mkecVEGm4TjFrjKI9VkYFUMxT1wnkcqaois5yGYAQbArofcVZ7Wcy9i7XzVQ26KfOAUrwJ9Na/gXVFHJts5da0C1+KuEICSoko0RA1VMUVFsfQzF+BxyA7Q3dLWhJrAC3Cjtgwyl+CyxEcyQeMfa4gugTO1ZS0jVhjXxIMI2P8Lk71/Ey/sDI4Ul70ngtTkA5idlInhS/wTljhbHxFzuNoAAAAASUVORK5CYII="></button>
+    </div>
+</div>
+
+<div class="row search-results">
+    @if (tours.Count > 0)
+    {
+        @foreach (var tour in tours)
+        {
+            <div class="col-md-4 mb-5">
+                <div class="tour-card" @onclick="() => OnTourClick(tour.TourId)">
+                    <img src="@tour.ImagePath" class="img-fluid" style="border-radius: 15px 15px 10px 10px;" alt="Tour Image" />
+                    <div class="tour-info">
+                        <h5 class="tour-title">@tour.Title</h5>
+                        <h6 class="tour-description">@tour.Description</h6>
+                        <label class="tour-date">@tour.StartDate.Value.ToShortDateString() - @tour.EndDate.Value.ToShortDateString()</label>
+                        <label class="tour-price">@tour.AmountRange</label>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div style="width: 100%; display: flex; justify-content: center;">
+            @if (isLoading)
+            {
+                <img src="/icons/plane.gif" alt="Loading..." />
+            }
+            else
+            {
+                <button class="update-btn" @onclick="LoadTours">
+                    <img src="/icons/icons8-обновить.svg" />
+                </button>
+            }
+        </div>
+    }
+    else
+    {
+        <div style="width: 100%; text-align: center; font-size: 18px;">Tours for @country.Name @(!string.IsNullOrEmpty(visitedCCA2) ? $"with a visit to {visitedCCA2} " : !string.IsNullOrEmpty(searchString) ? $"on request \"{searchString}\" " : "")were not found</div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string RequestString
+    {
+        get => $"with-county={visitedCCA2}&search={searchString}";
+        set
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                if (value.Contains(countryPrefix))
+                {
+                    visitedCCA2 = new string(value
+                        .Skip(value.IndexOf(countryPrefix) + countryPrefix.Length)
+                        .TakeWhile(c => c != '&')
+                        .ToArray());
+                }
+
+                if (value.Contains(searchPrefix))
+                {
+                    searchString = new string(value
+                        .Skip(value.IndexOf(searchPrefix) + searchPrefix.Length)
+                        .TakeWhile(c => c != '&')
+                        .ToArray());
+                }
+            }
+            else
+            {
+                visitedCCA2 = string.Empty;
+                searchString = string.Empty;
+            }
+
+            if (country == null)
+                country = UserStateService.UserCountry;
+
+            tours = new();
+
+            Task.Run(async () =>
+            {
+                if (country != null)
+                {
+                    try
+                    {
+                        isLoading = true;
+                        await InvokeAsync(StateHasChanged);
+                        await GetTours(country.CCA2, toursAmount: 18, searchQuery: searchString, visitedCCA2: visitedCCA2);
+                    }
+                    catch (Exception ex)
+                    {
+                        responseMessage = ex.Message;
+                    }
+                    finally
+                    {
+                        isLoading = false;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+            });
+        }
+    }
+    public string visitedCCA2 { get; set; } = string.Empty;
+    public string searchString { get; set; } = string.Empty;
+    string countryPrefix = "with-county=", searchPrefix = "search=";
+
+    private ScrollData ScrollData { get; set; } = new();
+
+    private Country country;
+    private List<Tour> tours { get; set; } = new();
+    private List<Tour> toursBuffer = new();
+    private string responseMessage { get; set; } = string.Empty;
+    private bool isLoading { get; set; } = false;
+
+    private void OnTourClick(long Id) => NavigationManager.NavigateTo($"tour-view/{Id}");
+
+    protected override void OnInitialized()
+    {
+        UserStateService.OnCountryUpdate += GetCountry;
+
+        ScrollData = ScrollService.ScrollData;
+        ScrollService.OnScroll += OnScroll;
+    }
+
+    private void SearchTours() => NavigationManager.NavigateTo($"tours/{searchPrefix + searchString}", true);
+    private async Task LoadTours()
+    {
+        try
+        {
+            isLoading = true;
+            tours.AddRange(toursBuffer);
+            await InvokeAsync(StateHasChanged);
+            await GetTours(country.CCA2, tours.Count > 0 ? tours.Last().TourId : 0, tours.Count > 0 ? 9 : 18, searchString, visitedCCA2);
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task GetTours(string forCCA2, long startTourId = 0, int toursAmount = 9, string searchQuery = "", string visitedCCA2 = "")
+    {
+        if (startTourId < 0)
+            throw new ArgumentOutOfRangeException(nameof(startTourId), "The value cannot be less than 0");
+        if (toursAmount < 1)
+            throw new ArgumentOutOfRangeException(nameof(toursAmount), "The value cannot be less than 1");
+        if (!string.IsNullOrEmpty(searchQuery) && !string.IsNullOrEmpty(visitedCCA2))
+            throw new ArgumentException($"Tours can only be requested either by search query or by countries visited");
+
+
+        string baseUrl = NavigationManager.BaseUri + "tour/tours-with-prices";
+
+        var toursResponse = await HttpClient.GetAsync($"{baseUrl}?for-country={forCCA2}&tour-id={startTourId}&tours-amount={toursAmount}&searchQuery={Uri.EscapeDataString(searchQuery)}&visitedCCA2={visitedCCA2}");
+
+        if (toursResponse.IsSuccessStatusCode)
+        {
+            var receivedTours = await toursResponse.Content.ReadFromJsonAsync<List<Tour>>();
+            receivedTours = receivedTours.OrderBy(t => t.StartDate).ToList();
+
+            if (startTourId == 0)
+            {
+                tours = receivedTours.Take(9).ToList();
+                toursBuffer = receivedTours.Skip(9).ToList();
+            }
+            else
+                toursBuffer = receivedTours;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        else
+        {
+            throw new Exception($"Error: {toursResponse.StatusCode} {await toursResponse.Content.ReadAsStringAsync()}");
+        }
+    }
+
+    private async Task GetCountry(Country? _country)
+    {
+        try
+        {
+            country = _country;
+            await GetTours(country.CCA2, toursAmount: 18, searchQuery: searchString, visitedCCA2: visitedCCA2);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+    }
+
+    private async void OnScroll(ScrollData scroll)
+    {
+        ScrollData = scroll;
+        await InvokeAsync(StateHasChanged);
+    }
+}

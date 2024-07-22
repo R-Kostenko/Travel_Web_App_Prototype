@@ -1,8 +1,8 @@
 ﻿@inherits ComponentBase
 @using Newtonsoft.Json;
 @using Travel_App_Web.Pages
-@using Travel_App_Web.Models
-@using Travel_App_Web.Services
+@using Models
+@using Services
 @using Microsoft.AspNetCore.SignalR.Client
 @using System.Globalization
 @implements IAsyncDisposable
@@ -10,6 +10,7 @@
 @inject NavigationManager NavigationManager
 @inject IHttpContextAccessor HttpContextAccessor
 @inject UserStateService UserStateService
+@inject IJSRuntime JSRuntime
 
 <style>
     .chat-list {
@@ -18,16 +19,16 @@
         display: flex;
         flex-direction: column;
         padding: 15px;
-        scrollbar-width: thin; /* для Firefox */
-        scrollbar-color: transparent transparent; /* для Firefox */
+        scrollbar-width: thin;
+        scrollbar-color: transparent transparent;
     }
 
         .chat-list::-webkit-scrollbar {
-            width: 5px; /* ширина ползунка для других браузеров */
+            width: 5px;
         }
 
         .chat-list::-webkit-scrollbar-thumb {
-            background-color: transparent; /* цвет ползунка для других браузеров */
+            background-color: transparent;
         }
 
     .back-button {
@@ -90,23 +91,23 @@
     }
 </style>
 
-<div class="card" style="max-width: 20%; min-width: 300px;">
-    <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+<div class="card" style="max-width: 20%; min-width: 300px; border-radius: 10px;">
+    <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between" style="border-radius: 10px 10px 0 0;">
         @if (User != null && showChat && User.Role.RoleName == "Admin")
         {
-            <a class="back-button" role="button" @onclick="CloseChat">
+            <a class="back-button" role="button" @onclick="() => {chatToOpen = null; StateHasChanged();}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" class="bi bi-arrow-left-short" viewBox="0 0 16 16">
                     <path fill-rule="evenodd" d="M12 8a.5.5 0 0 1-.5.5H5.707l2.147 2.146a.5.5 0 0 1-.708.708l-3-3a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L5.707 7.5H11.5a.5.5 0 0 1 .5.5" />
                 </svg>
             </a>
         }
-        <h5 class="mb-0">Chat Support</h5>
+        <h5 class="mb-0">Support chat</h5>
         <button type="button" class="btn-close text-white" aria-label="Close" @onclick="OnClose"></button>
     </div>
     @if (User is null)
     {
         <div class="card-body chat-list">
-            <div class="log-reg">Log In or Register please</div>
+            <div class="log-reg">Please log in</div>
         </div>
     }
     else if (User.Role.RoleName == "Admin")
@@ -114,21 +115,21 @@
         @if (User.Chats.Count == 0)
         {
             <div class="card-body chat-list">
-                <div class="log-reg">You don't have any chat yet</div>
+                <div class="log-reg">You don't have any chats yet</div>
             </div>
         }
         else
         {
             if (showChat)
             {
-                <SupportChatComponent UserEmail="@User?.Email" Chat="@chatToOpen" OnSend="async (content, chatId) => await SendMessage(content, chatId)" OnRead="async (userEmail, chatId) => await ReadSet(userEmail, chatId)" @ref="chatComponent" />
+                <SupportChatComponent UserEmail="@User?.Email" TimeZoneOffset="@timeZoneOffset" Chat="@chatToOpen" OnSend="async (content, chatId) => await SendMessage(content, chatId)" OnRead="async (userEmail, chatId) => await ReadSet(userEmail, chatId)" @ref="chatComponent" />
             }
             else
             {
                 <div class="card-body chat-list">
                     @foreach (Chat chat in User.Chats)
                     {
-                        <div class="chat" @onclick="() => OpenChat(chat)">
+                        <div class="chat" @onclick="() => chatToOpen = chat">
                             <span class="chat-sender">@chat.Messages.OrderByDescending(m => m.DispatchTime).First(m => m.SenderEmail != User.Email).SenderName</span>
                             <div class="chat-content">
                                 <span class="message-name">@chat.Messages.Select(m => m.SenderName == User.FirstName + "(admin)" ? "You:" : m.SenderName + ':').Last()</span>
@@ -138,7 +139,7 @@
                             {
                                 <div class="new-messages-item">@chat.Messages.Count(m => m.SenderEmail != User.Email && !m.IsRead).ToString()</div>
                             }
-                            <div class="message-time">@chat.Messages.Last().DispatchTime.ToLocalTime().ToString("H:mm", CultureInfo.InvariantCulture)</div>
+                            <div class="message-time">@ToLocalTime(chat.Messages.Last().DispatchTime).ToString("H:mm", CultureInfo.InvariantCulture)</div>
                         </div>
                     }
                 </div>
@@ -150,7 +151,7 @@
         chatToOpen = User.Chats.FirstOrDefault();
         if (showChat)
         {
-            <SupportChatComponent UserEmail="@User?.Email" Chat="@chatToOpen" OnSend="async (content, chatId) => await SendMessage(content, chatId)" OnRead="async (userEmail, chatId) => await ReadSet(userEmail, chatId)" @ref="chatComponent" />
+            <SupportChatComponent UserEmail="@User?.Email" TimeZoneOffset="@timeZoneOffset" Chat="@chatToOpen" OnSend="async (content, chatId) => await SendMessage(content, chatId)" OnRead="async (userEmail, chatId) => await ReadSet(userEmail, chatId)" @ref="chatComponent" />
         }
     }
 </div>
@@ -162,6 +163,7 @@
     private bool showChat => chatToOpen != null;
     private Chat? chatToOpen = null;
     private SupportChatComponent? chatComponent;
+    private int timeZoneOffset { get; set; }
 
     public async Task OnUserUpdate(User? user)
     {
@@ -186,6 +188,8 @@
         UserStateService.OnUserUpdate += OnUserUpdate;
         User = UserStateService.User;
 
+        timeZoneOffset = await JSRuntime.InvokeAsync<int>("getTimeZoneOffset");
+
         if (User != null)
         {
             await HubConnectAsync();
@@ -201,8 +205,8 @@
         {
             User.Chats.Add(new()
             {
-                Id = -1,
-                InterlocutorsEmails = new() { new() { Email = User.Email } }
+                ChatId = -1,
+                InterlocutorsEmails = new() { User.Email }
             });
         }
     }
@@ -215,19 +219,9 @@
         }
     }
 
-    private void OpenChat(Chat chat)
-    {
-        chatToOpen = chat;
-    }
-    private void CloseChat()
-    {
-        chatToOpen = null;
-        StateHasChanged();
-    }
-
     private async Task HubConnectAsync()
     {
-        var uri = new UriBuilder(NavigationManager.Uri);
+        var uri = new UriBuilder(NavigationManager.BaseUri);
 
         var response = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/get-cookies");
         string content = await response.Content.ReadAsStringAsync();
@@ -257,15 +251,15 @@
         hubConnection.On<int, Message>("ReceiveMessage", async (chatId, message) =>
         {
             if (User is null) return;
-            if (User.Chats.Exists(c => c.Id == chatId))
+            if (User.Chats.Exists(c => c.ChatId == chatId))
             {
-                if (chatToOpen != null && chatId == chatToOpen.Id)
+                if (chatToOpen != null && chatId == chatToOpen.ChatId)
                 {
                     await chatComponent?.ReceiveMessage(message);
                 }
                 else
                 {
-                    User.Chats.FirstOrDefault(c => c.Id == chatId)?.Messages.Add(message);
+                    User.Chats.FirstOrDefault(c => c.ChatId == chatId)?.Messages.Add(message);
                     await InvokeAsync(StateHasChanged);
                 }
             }
@@ -279,12 +273,12 @@
         await hubConnection.StartAsync();
     }
 
-    private async Task SendMessage(string content, int chatId)
+    private async Task SendMessage(string content, long chatId)
     {
         await hubConnection.SendAsync("Send", User.Role.RoleName == "Admin" ? User.FirstName + "(admin)" : User.FirstName, content, chatId);
     }
 
-    private async Task ReadSet(string userEmail, int chatId)
+    private async Task ReadSet(string userEmail, long chatId)
     {
         await hubConnection.SendAsync("ReadSet", userEmail, chatId);
     }
@@ -303,6 +297,8 @@
         }
         finally { await hubConnection.DisposeAsync(); }
     }
+
+    private DateTime ToLocalTime(DateTime utcTime) => utcTime.AddMinutes(-timeZoneOffset);
 
     public async ValueTask DisposeAsync()
     {

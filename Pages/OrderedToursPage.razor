@@ -1,0 +1,162 @@
+﻿@page "/ordered-tours"
+@using Microsoft.EntityFrameworkCore;
+@using Models
+@using Services
+@using Services.Mail
+@using System.Net
+@using System.Net.Http.Json
+@using Travel_App_Web.Data;
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
+@inject DBContext DBContext
+@inject EmailSenderService EmailSender
+
+<style>
+    .link {
+        color: blueviolet;
+        text-decoration: underline;
+        cursor: pointer;
+        transition: color 0.3s ease;
+    }
+
+        .link:hover {
+            color: darkblue;
+        }
+
+    .tour-container {
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid lightgrey;
+        display: inline-flex;
+        justify-content: space-between;
+        text-align: center;
+        margin-bottom: 10px;
+        align-items: center;
+    }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<div style="width: 100%; display: flex; justify-content: center; text-align: center;">
+    <div class="logreg-container" style="z-index: 1; border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+        <div class="card">
+            <div class="card-body" style="width: fit-content; padding: 30px;">
+                @if (userTours.Count < 1)
+                {
+                    <h4 class="mb-4" style="width: 100%; text-align: center;">You have no tours booked yet</h4>
+                }
+                else
+                {
+                    <h4 class="mb-4" style="width: 100%; text-align: center; margin-bottom: 20px;">
+                        Booked tours
+                    </h4>
+
+                    @foreach (var tour in userTours)
+                    {
+                        long tourId = tour.TourId;
+                        string tourName = tour.Title;
+
+                        <div class="tour-container">
+                            <div style="border-radius: 10px; overflow: hidden; width: 35%; margin-right: 10px; align-items: center;
+                            justify-content: center;
+                            display: inline-flex;">
+                                <img src="@tour.ImagePath" style="width: 100%; height: fit-content;" />
+                            </div>
+
+                            <div style="margin-right: 10px;">
+                                <h5>@tour.Title</h5>
+                                <h6><a class="link" href="@($"tour-view/{tour.TourId}")">View the tour</a></h6>
+                                <h6>@tour.StartDate.Value.ToShortDateString() - @tour.EndDate.Value.ToShortDateString()</h6>
+                            </div>
+
+                            <div>
+                                <button class="secondary-btn" @onclick="async() => await UnsubscribeAsync(tourId, tourName)">
+                                    Opt-out
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    List<Tour> userTours { get; set; } = new();
+    string responseMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("");
+        UserStateService.OnUserUpdate += async (user) =>
+        {
+            await Task.Run(() =>
+            {
+                if (user is null)
+                    NavigationManager.NavigateTo("");
+            });
+        };
+
+        if (UserStateService.User is null)
+        {
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+
+        await GetTours();
+    }
+
+    private async Task UnsubscribeAsync(long tourId, string tourName)
+    {
+        try
+        {
+            var response = await HttpClient.GetAsync(NavigationManager.BaseUri + $"tour/unsub/{tourId}-{UserStateService.User.Email}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                responseMessage = "<h5 style=\"color: green\">You have successfully canceled the tour<h5>";
+
+                await InvokeAsync(StateHasChanged);
+
+                await SendUnsubFromTourEmailAsync(tourName);
+
+                await GetTours();
+            }
+            else
+            {
+                responseMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+    }
+
+    private async Task GetTours()
+    {
+        var user = UserStateService.User;
+
+        try
+        {
+            userTours = await DBContext.Tours.Where(t => t.Participants.Any(pu => pu.PrimaryUser.Email == user.Email || pu.OtherUsers.Any(p => p.User != null && p.User.Email == user.Email))).ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+    }
+
+    private async Task SendUnsubFromTourEmailAsync(string tourName)
+    {
+        var model = new UnsubcribeFromTourNotificationModel { Name = UserStateService.User.FirstName, TourName = tourName };
+        await EmailSender.SendEmailAsync(UserStateService.User.Email, "Unsubscribe successful", "EmailTemplates/UnsubcribeFromTourNotification.cshtml", model);
+    }
+}

@@ -1,0 +1,572 @@
+﻿@page "/tour-view/{TourId}"
+@using Microsoft.EntityFrameworkCore
+@using Models
+@using Services
+@using Travel_App_Web.Data
+@inject NavigationManager NavigationManager
+@inject DBContext DBContext
+@inject CurrencyConverter CurrencyConverter
+@inject UserStateService UserStateService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>@tour.Title</PageTitle>
+
+<style>
+    .aside-block {
+        position: sticky;
+        top: 100px;
+        height: 100%;
+        background-color: transparent;
+    }
+
+    .nav-block {
+        display: flex;
+        padding: 20px;
+        width: fit-content;
+        border-radius: 20px;
+        backdrop-filter: saturate(180%) blur(8px);
+        background-color: rgba(250, 250, 252, 0.8);
+        flex-direction: column;
+    }
+
+        .nav-block > a {
+            font-size: 16px;
+            margin: 5px 20px;
+            text-decoration: underline !important;
+            cursor: pointer;
+            color: #0d6efd !important;
+        }
+
+    .agency-block {
+        display: flex;
+        margin-top: 20px;
+        padding: 10px 20px;
+        border-radius: 20px;
+        border: 1px solid grey;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .tour-block {
+        border-radius: 30px;
+        background-color: rgba(255, 255, 255, 0.8);
+        padding: 20px;
+    }
+
+    .tour-subblock {
+        border-radius: 20px;
+        background-color: rgba(255, 255, 255, 0.9);
+    }
+
+    .constructor-h6 {
+        font-size: 18px;
+        font-weight: 500;
+    }
+
+    .photo-block {
+        display: inline-flex;
+        width: 65%;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-right: 10px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .countries-block {
+        display: inline-flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        margin-left: 10px;
+    }
+
+        .countries-block > a {
+            margin: 0 20px 10px 0;
+            color: darkgoldenrod;
+            transition: all .2s ease-in-out;
+        }
+
+    .city-div {
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    .day-block {
+        display: flex;
+        width: 100%;
+        padding: 20px;
+        border: 1px solid lightgray;
+        border-radius: 20px;
+    }
+
+    .photo-btn {
+        background-color: rgba(128, 128, 128, 0.8);
+        width: 40px;
+        height: 40px;
+        border-radius: 20px;
+    }
+
+    .order-btn {
+        font-size: 20px;
+        margin: 2px;
+        border: 2px solid transparent;
+    }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+@if (isLoading)
+{
+    <div style="display: flex; width: 100%; justify-content: center;">
+        <img style="height: 40px;" src="/icons/plane.gif" alt="Loading..." />
+    </div>
+}
+else
+{
+    <div style="display: flex;position: relative;
+    left: -30px;
+    width: calc(100% + 30px);">
+        <aside class="aside-block">
+            <div class="nav-block">
+                <a @onclick="async () => await ScrollTo(Ids.tourMain)">Main</a>
+                <a @onclick="async () => await ScrollTo(Ids.tourTitle)">Title</a>
+                <a @onclick="async () => await ScrollTo(Ids.tourDescription)">Description</a>
+                <a @onclick="async () => await ScrollTo(Ids.tourPath)">Route</a>
+                <a @onclick="async () => await ScrollTo(Ids.tourPrices)">Tour price</a>
+                <a @onclick="async () => await ScrollTo(Ids.tourProgram)">Tour programу</a>
+
+                <div class="agency-block">
+                    <h6>@tour.Agency.Name</h6>
+                    <h6 style="font-size: 14px;">@tour.Agency.Country.Name</h6>
+                    <a href="mailto:@(tour.Agency.Email)">@tour.Agency.Email</a>
+                    @foreach (var phoneNumber in tour.Agency.PhoneNumbers)
+                    {
+                        <h6 style="font-size: 14px; margin-top: 5px;">@phoneNumber</h6>
+                    }
+                </div>
+            </div>
+        </aside>
+
+        <div style="margin-left: 30px; width: 100%;">
+            <div class="card tour-block">
+
+                <div id="tourMain" class="card-body tour-subblock mb-3" style="display: inline-flex; justify-content: space-between;">
+                    <div class="photo-block">
+                        <img src="@tour.ImagePath" style="width: 100%; height: fit-content;" />
+                    </div>
+
+                    <div class="mb-2" style="width: 33%; display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;">
+                        <div class="mb-3" style="display: flex; flex-direction: column; align-items: center;">
+                            <h4>@(freePlaces > 0 ? freePlaces : "No")</h4>
+                            <h6>free places</h6>
+                        </div>
+                        <h5 class="form-label constructor-h6 mb-1">@tour.StartDate.Value.ToShortDateString() - @tour.EndDate.Value.ToShortDateString()</h5>
+                        <h6 class="form-label mb-5" style="font-size: 14px; font-weight: 400; text-align: center;">Reservations close the week before the tour starts</h6>
+                        <div>
+                            <button class="primary-btn order-btn" type="submit" @onclick="Order">
+                                Order
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body tour-subblock mb-3">
+                    <h4 id="tourTitle" class="mb-3">@tour.Title</h4>
+
+                    <div class="mb-3 countries-block">
+                        @foreach (var city in tour.Cities)
+                        {
+                            <a href="@($"tours/with-county={city.Country.CCA2}")">@city.Country.Name</a>
+                        }
+                    </div>
+
+                    <h5 id="tourDescription" class="mb-3" style="font-size: 19px; font-weight: 400;">
+                        @tour.Description
+                    </h5>
+                </div>
+
+                <div id="tourPath" class="mb-3" style="width: 100%; text-align: center; display: inline-flex; justify-content: center;">
+                    <div class="card-body tour-subblock">
+                        <h5 for="citiesList" class="card-title" style="margin-bottom: 20px;">Tour route</h5>
+                        <div style="width: 100%; display: inline-flex; align-items: center; justify-content: center;">
+                            @for (int i = 0; i < tour.Cities.Count; i++)
+                            {
+                                int index = i;
+                                <div class="city-div">
+                                    <img src="/icons/icons8-location-yellow-74.png" style="width: 50px;" />
+                                    <h6 style="font-size: 14px;">@tour.Cities[index].Name</h6>
+                                    <h6 style="font-size: 12px;">@tour.Cities[index].Country.Name</h6>
+                                </div>
+
+                                @if (index != tour.Cities.Count - 1)
+                                {
+                                    <div style="margin: 0 10px;"><img src="/icons/icons8-направо-черное-24.png" /></div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tourPrices" class="mb-3" style="width: 100%; text-align: center; display: inline-flex; justify-content: center;">
+                    <div class="card-body tour-subblock" style="display: inline-flex; justify-content: center; padding-left: 20px; padding-right: 20px; flex-direction: column;">
+                        <h5 class="card-title" style="margin-bottom: 20px;">Prices</h5>
+
+                        @if (tour.HotelsOffers.Count > 0)
+                        {
+                            <div class="mb-3">
+                                @foreach (var hotel in tour.Hotels)
+                                {
+                                    var hotelOffers = tour.HotelsOffers
+                                                            .Where(ho => ho.HotelId == hotel.HotelId)
+                                                            .OrderBy(ho => ho.AdultsQuantity)
+                                                            .ToList();
+
+                                    <table class="table">
+                                        <thead>
+                                            <tr style="background-color: #ffc028; text-transform: uppercase;">
+                                                <th scope="col" colspan="2" style="border: 1px solid #ffc028;">@hotel.Name</th>
+                                            </tr>
+                                            <tr style="background-color: #ffd060;">
+                                                <th scope="col" style="border: 1px solid #ffc028;">Room type</th>
+                                                <th scope="col" style="border: 1px solid #ffc028;">Price</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var offer in hotelOffers)
+                                            {
+                                                <tr>
+                                                    <td style="border: 1px solid #ffc028;">For @offer.AdultsQuantity people@(offer.Room?.Category != null ? $", {offer.Room.Category.Replace('_', ' ').ToLower()}" : "")@(offer.Room?.Beds != null ? $", {offer.Room?.Beds} beds" : "")</td>
+                                                    <td style="border: 1px solid #ffc028;">@offer.PriceTotal @offer.Currency</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                }
+                            </div>
+                        }
+
+                        @if (tour.Program.Count > 0)
+                        {
+                            double amount = 0;
+                            amount += tour.ExtraAmount;
+                            string currency = tour.Currency.ToLower();
+
+                            <div class="mb-3">
+                                <table class="table">
+                                    <thead>
+                                        <tr style="background-color: #ffc028;">
+                                            <th scope="col" style="border: 1px solid #ffc028;">Activity, type</th>
+                                            <th scope="col" style="border: 1px solid #ffc028;">Price</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var activity in tour.Program)
+                                        {
+                                            double price;
+                                            switch (activity)
+                                            {
+                                                case TourOrSideActivity tos:
+                                                    price = tos.PriceAmount != null ? CurrencyConverter.Convert(tos.PriceAmount.Value, tos.Currency, tour.Currency) : 0;
+                                                    break;
+                                                case TransferOffer to:
+                                                    price = to.TranType is TransferOffer.TransferType.SHARED
+                                                            || to.TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                                                            || to.TranType is TransferOffer.TransferType.AIRPORT_BUS
+                                                        ? (to.PriceAmount != null ? CurrencyConverter.Convert(to.PriceAmount.Value, to.Currency, tour.Currency) : 0)
+                                                        : ((to.PriceAmount != null ? CurrencyConverter.Convert(to.PriceAmount.Value, to.Currency, tour.Currency) : 0) / tour.ParticipantsMaxNumber);
+                                                    break;
+                                                default:
+                                                    price = 0;
+                                                    break;
+                                            }
+
+                                            price = Math.Round(price, 2);
+                                            amount += price;
+
+                                            <tr>
+                                                <td style="border: 1px solid #ffc028;">@activity.Title, @activity.ActType.GetEnumMemberValue()</td>
+                                                <td style="border: 1px solid #ffc028;">
+                                                    @(activity is TransferOffer toa 
+                                                        ? toa.TranType is TransferOffer.TransferType.SHARED
+                                                            || toa.TranType is TransferOffer.TransferType.AIRPORT_EXPRESS
+                                                            || toa.TranType is TransferOffer.TransferType.AIRPORT_BUS 
+                                                            ? "" : "~" 
+                                                        : "")@price @currency
+                                                </td>
+                                            </tr>
+                                        }
+                                        <tr>
+                                            <td style="border: 1px solid #ffc028;">Travel agency services</td>
+                                            <td style="border: 1px solid #ffc028;">@Math.Round(tour.ExtraAmount, 2) @currency</td>
+                                        </tr>
+                                        <tr style="background-color: #ffd060;">
+                                            <td style="border: 1px solid #ffc028; font-weight: 600;">Amount</td>
+                                            <td style="border: 1px solid #ffc028; font-weight: 600;">@Math.Round(amount, 2) @currency</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+
+                        <div>
+                            <table class="table">
+                                <thead>
+                                    <tr style="background-color: #ffd060;">
+                                        <th scope="col" style="border: 1px solid #ffc028;">Included in the price</th>
+                                        <th scope="col" style="border: 1px solid #ffc028;">Not included</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < Math.Max(tour.Included.Count, tour.NotIncluded.Count); i++)
+                                    {
+                                        <tr>
+                                            <td style="border: 1px solid #ffc028;">@(i < tour.Included.Count ? tour.Included[i] : "")</td>
+                                            <td style="border: 1px solid #ffc028;">@(i < tour.NotIncluded.Count ? tour.NotIncluded[i] : "")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                @if (program.Count > 0)
+                {
+                    <div id="tourProgram" class="card-body tour-subblock" style="width: 100%; display: inline-flex; flex-direction: column; align-items: center;">
+                        <h5 class="card-title" style="margin-bottom: 20px;">Tour program</h5>
+
+                        @foreach (var day in program)
+                        {
+                            daysPhotosIndexes.TryAdd(day.Key, 0);
+                            List<string> dayPhotos = day.Value.SelectMany(ac => ac is TourOrSideActivity tos ? tos.PicturesUrls : new List<string>()).ToList() ?? new();
+
+                            <div class="mb-3 day-block">
+                                @if (dayPhotos.Count > 0)
+                                {
+                                    <div class="col-md-5" style="position: relative; height: fit-content;">
+                                        <img src="@dayPhotos[daysPhotosIndexes[day.Key]]" class="img-fluid" style="border-radius: 10px;" alt="Day image">
+                                        @if (dayPhotos.Count > 1)
+                                        {
+                                            <div style="display: inline-flex; position: absolute; left: 5px; top: 50%;">
+                                                <a role="button" class="photo-btn" style="transform: rotate(90deg);" @onclick="() => {
+                                                                    if (daysPhotosIndexes[day.Key] - 1 < 0) {
+                                                                        daysPhotosIndexes[day.Key] = dayPhotos.Count - 1;
+                                                                    }
+                                                                    else{
+                                                                        daysPhotosIndexes[day.Key]--;
+                                                                    }
+                                                                }">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="40" height="40" fill="white" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                    </svg>
+                                                </a>
+                                            </div>
+                                            <div style="display: inline-flex; position: absolute; right: 5px; top: 50%;">
+                                                <a role="button" class="photo-btn" style="transform: rotate(270deg);" @onclick="() => {
+                                                                if (daysPhotosIndexes[day.Key] + 1 >= dayPhotos.Count) {
+                                                                    daysPhotosIndexes[day.Key] = 0;
+                                                                }
+                                                                else{
+                                                                    daysPhotosIndexes[day.Key]++;
+                                                                }
+                                                            }">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" id="Layer_1" data-name="Layer 1" width="40" height="40" fill="white" class="fi fi-tr-angle-small-down" viewBox="0 0 24 24">
+                                                        <path d="m12,15c-.916,0-1.776-.356-2.424-1.004l-4.418-4.131c-.201-.188-.212-.505-.023-.707.188-.201.505-.212.707-.023l4.43,4.143c.941.939,2.527.928,3.445.012l4.441-4.154c.202-.188.519-.178.707.023.188.202.178.519-.023.707l-4.43,4.143c-.636.636-1.496.992-2.412.992Z" />
+                                                    </svg>
+                                                </a>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                <div class="col-md-@(dayPhotos.Count > 0 ? "7" : "12")" style="padding-left: 20px;">
+                                    <div style="width: 100%; display: inline-flex; justify-content: space-between;">
+                                        <div>
+                                            <h6>@tour.DayTitles[day.Key]</h6>
+                                            <label style="font-size: 14px; font-weight: 400;">@day.Key</label>
+                                        </div>
+
+                                        <h6 style="width: fit-content;">Day @((DateTime.Parse(day.Key) - tour.StartDate.Value.Date).Days + 1)</h6>
+                                    </div>
+                                    @foreach (var act in day.Value)
+                                    {
+                                        string description = string.Empty;
+
+                                        switch (act)
+                                        {
+                                            case TransferOffer to:
+                                                description += $"{to.Description + ". "}From {to.StartLocation.ShortAddress} to {to.EndLocation.ShortAddress}";
+                                                break;
+                                            case PointOfInteres poi:
+                                                description += $"{poi.Name}";
+                                                break;
+                                            case TourOrSideActivity side:
+                                                description += $"{(MarkupString)(side.ShortDescription + ". " ?? string.Empty)}{(MarkupString)(side.Description ?? string.Empty)}";
+                                                break;
+                                        }
+
+                                        <div style="width: 100%; margin-top: 10px; display: inline-flex; flex-wrap: wrap;">
+                                            <label style="font-size: 13px; font-weight: 600;">@act.StartDate.ToShortTimeString() - @act.EndDate.ToShortTimeString() </label>
+                                            <p style="margin-left: 10px; font-size: 14px;">
+                                                <b>@act.Title</b>. @(act is TourOrSideActivity tos
+                                                 ? (MarkupString)($"{tos.ShortDescription ?? string.Empty}. {tos.Description ?? string.Empty}")
+                                                 : description)
+                                            </p>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<div style="position: fixed;
+    z-index: 3;
+    bottom: 50px;
+    right: 30px;
+    width: fit-content;
+    border-radius: 21px;
+    overflow: hidden;
+    backdrop-filter: saturate(180%) blur(8px);
+    background-color: rgba(250, 250, 252, 0.8);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: stretch;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.4);">
+    <button type="submit" class="primary-btn order-btn" @onclick="Order">Order</button>
+</div>
+
+@code {
+    [Parameter]
+    public string TourId { get; set; }
+    private Tour tour = new();
+    private int freePlaces = 0;
+    Dictionary<string, List<Activity>> program = new();
+    Dictionary<string, int> daysPhotosIndexes = new();
+    private bool isLoading { get; set; } = false;
+    private string responseMessage { get; set; } = string.Empty;
+
+    private async Task ScrollTo(Ids elementId) => await JSRuntime.InvokeVoidAsync("scrollTo", elementId.ToString());
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            await InvokeAsync(StateHasChanged);
+
+            long tourId = Convert.ToInt64(TourId);
+
+            var requestedTour = await DBContext.Tours
+                                            .Include(t => t.Agency)
+                                            .ThenInclude(a => a.Country)
+                                            .Include(t => t.Cities)
+                                            .ThenInclude(c => c.Country)
+                                            .Include(t => t.HotelsOffers)
+                                            .ThenInclude(ho => ho.Room)
+                                            .Include(t => t.Hotels)
+                                            .Include(t => t.Program)
+                                            .AsSplitQuery()
+                                            .FirstOrDefaultAsync(t => t.TourId == tourId);
+
+            if (requestedTour != null)
+            {
+                await DBContext.Entry(requestedTour)
+                    .Collection(t => t.Participants)
+                    .LoadAsync();
+
+                foreach (var participant in requestedTour.Participants)
+                {
+                    await DBContext.Entry(participant)
+                        .Collection(p => p.OtherUsers)
+                        .LoadAsync();
+
+                    foreach (var other in participant.OtherUsers)
+                    {
+                        await DBContext.Entry(other)
+                            .Reference(o => o.User)
+                            .LoadAsync();
+                    }
+                }
+
+                freePlaces = requestedTour.ParticipantsMaxNumber - requestedTour.Participants.Sum(p => p.OtherUsers.Count + 1);
+
+                tour = requestedTour;
+                tour.Program = tour.Program.OrderBy(ac => ac.StartDate).ToList();
+
+                foreach (var act in tour.Program)
+                {
+                    if (act is TransferOffer to)
+                    {
+                        DBContext.Entry(to).Reference(to => to.StartLocation).Load();
+                        DBContext.Entry(to).Reference(to => to.EndLocation).Load();
+                    }
+
+                    if (!program.TryAdd(act.StartDate.ToShortDateString(), new() { act }))
+                        program[act.StartDate.ToShortDateString()].Add(act);
+
+                    if (act.StartDate.Date != act.EndDate.Date)
+                        if (!program.TryAdd(act.EndDate.ToShortDateString(), new() { act }))
+                            program[act.EndDate.ToShortDateString()].Add(act);
+                }
+
+            }
+            else
+                NavigationManager.NavigateTo("tours");
+
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task Order()
+    {
+        if (UserStateService.User == null)
+        {
+            responseMessage = "Log in to the system";
+            await InvokeAsync(StateHasChanged);
+        }
+        else if (UserStateService.UserCountry?.CCA2 != tour.Agency?.Country?.CCA2)
+        {
+            responseMessage = "This tour is not available in your country";
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(2000);
+            NavigationManager.NavigateTo("");
+        }
+        else if (DateTime.Now.AddDays(7) > tour.StartDate.Value)
+        {
+            responseMessage = "Tour booking is no longer available";
+            await InvokeAsync(StateHasChanged);
+        }
+        else
+            NavigationManager.NavigateTo($"tour-order/{TourId}");
+    }
+
+    private enum Ids
+    {
+        tourMain,
+        tourTitle,
+        tourDescription,
+        tourPath,
+        tourPrices,
+        tourProgram
+    }
+}

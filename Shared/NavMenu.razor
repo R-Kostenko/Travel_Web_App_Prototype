@@ -1,153 +1,709 @@
-﻿@using Travel_App_Web.Pages
-@using Travel_App_Web.Models
-@using Travel_App_Web.Services
-@using System.Security.Claims
-@using Microsoft.AspNetCore.Components.Authorization
-@inject AuthenticationStateProvider AuthenticationStateProvider
+﻿@using System.Runtime.Serialization;
+@using Hangfire;
+@using Services.Mail;
+@using Travel_App_Web.Pages
+@using Models
+@using Services
 @inject NavigationManager NavigationManager
 @inject HttpClient HttpClient
 @inject UserStateService UserStateService
+@inject ScrollService ScrollService
+@inject IJSRuntime JSRuntime
 
-<CascadingAuthenticationState>
-<div class="navbar navbar-expand-lg navbar-dark" style="background-color: #5E86AF; border-radius: 10px 10px 10px 10px;">
-    <div class="container">
-        <a class="navbar-brand" href="#">Wonderlust Explorers</a>
-        <button class="navbar-toggler" type="button" @onclick="ToggleNavMenu">
-            <span class="navbar-toggler-icon"></span>
+<style>
+    .nav-field {
+        position: fixed;
+        z-index: 3;
+        top: 0;
+        left: 0;
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        display: inline-flex;
+        align-items: flex-start;
+        justify-content: space-between;
+    }
+
+    .navbar-brand {
+        min-width: 244px;
+        border-radius: 22px;
+        border: 0;
+        height: 44px;
+        background-color: transparent;
+        margin: 0;
+        font-size: 22px;
+        font-weight: 600;
+        color: royalblue;
+        transition: color 0.4s ease, background-color .5s ease-in-out;
+    }
+        .navbar-brand:hover {
+            color: black;
+        }
+
+        .navbar-brand.is-floating {
+            background-color: gray;
+            color: white;
+            transition: background-color 0.4s ease;
+        }
+
+            .navbar-brand.is-floating:hover{
+                background-color: darkslategray;
+            }
+
+    .nav-container {
+        display: inline-flex;
+        z-index: 2;
+        margin: 0;
+        width: 100%;
+        background-color: gainsboro;
+        border-radius: 0;
+        padding: 9px 20px 9px 50px;
+        transition: all .5s ease-in-out;
+    }
+        .nav-container.is-floating {
+            margin: 20px 0 0 30px;
+            backdrop-filter: saturate(180%) blur(8px);
+            background-color: rgba(250, 250, 252, 0.8);
+            border-radius: 30px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            padding: 3px 5px 3px 3px;
+        }
+        .nav-container.on-top {
+            margin: 0;
+            background-color: gainsboro;
+            border-radius: 0;
+            padding: 9px 20px 9px 50px;
+        }
+
+        .nav-container > ul {
+            position: relative;
+            width: 100%;
+            list-style: none;
+            margin: 0;
+            padding-left: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: space-evenly;
+            transition: padding-left .5s ease-in-out;
+        }
+            .nav-container > ul.is-floating {
+                padding-left: 10px;
+            }
+
+            .nav-container > ul.on-top {
+                padding-left: 30px;
+            }
+
+    .tab-container {
+        position: absolute;
+        top: 100%;
+        width: fit-content;
+        max-width: 50vw;
+        max-height: 250px;
+        padding-top: 15px;
+        visibility: hidden;
+        opacity: 0;
+        background-color: transparent;
+        transition: visibility 0s linear .3s, padding-top .2s linear .1s, opacity .2s linear .1s;
+    }
+
+        .tab-container.is-open {
+            padding-top: 10px;
+            visibility: visible;
+            opacity: 1;
+            transition: visibility 0s linear, padding-top .2s linear .1s, opacity .2s linear .1s;
+        }
+
+        .tab-container > .tab {
+            border-radius: 15px;
+            background-color: rgba(250, 250, 252, 1);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            padding: 5px;
+            cursor: default;
+        }
+
+    .tab-title {
+        border-radius: 10px;
+        padding: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        opacity: 0.9;
+        transition: opacity .2s ease-in-out;
+    }
+
+        .tab-title:hover {
+            opacity: 1;
+        }
+
+    .country-groups {
+        width: fit-content;
+        max-width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-around;
+    }
+
+    .region-div {
+        margin-bottom: 10px;
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .subregion-div {
+        margin-top: 10px;
+        margin-left: 5px;
+        font-size: 15px;
+        font-weight: 500;
+    }
+        .subregion-div:first-child {
+            margin-top: 0;
+        }
+
+    .country-div {
+        margin-left: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        color: cornflowerblue;
+        transition: color .3s ease-in-out;
+    }
+        .country-div:hover {
+            color: darkslateblue;
+        }
+
+    .user-box {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+        z-index: 2;
+        width: fit-content;
+        background-color: gainsboro;
+        border-radius: 0;
+        padding: 12px 50px 12px 20px;
+        transition: all .5s ease-in-out;
+    }
+        .user-box.is-floating {
+            margin: 20px 30px 0 0;
+            backdrop-filter: saturate(180%) blur(8px);
+            background-color: rgba(250, 250, 252, 0.8);
+            border-radius: 22px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            padding: 3px;
+        }
+        .user-box.on-top {
+            margin: 0;
+            background-color: gainsboro;
+            border-radius: 0;
+            padding: 10px 50px 10px 20px;
+        }
+
+    .nav-link {
+        padding-right: 20px;
+        padding-left: 20px;
+    }
+
+    .user-btn {
+        border-radius: 20px;
+        height: 42px;
+        padding: 5px 30px;
+        font-size: 1.25rem;
+        color: white;
+        transition: background-color 0.4s ease;
+        background-color: deepskyblue;
+        display: inline-flex;
+        align-items: center;
+    }
+        .user-btn:hover {
+            background-color: #0056b3;
+        }
+
+        .user-btn.is-logged-in {
+            padding-left: 20px;
+        }
+
+    .wrapper {
+        width: 100%;
+        display: grid;
+        grid-template-rows: 0fr;
+    }
+
+        .wrapper.on-top {
+            position: absolute;
+            top: 100%;
+            background-color: inherit;
+            width: calc(100% - 70px);
+            border-radius: 0 0 10px 10px;
+            transition: grid-template-rows .5s cubic-bezier(0.4, 0, 0.2, 1) .1s;
+        }
+
+            .wrapper.on-top.is-open {
+                grid-template-rows: 1fr;
+            }
+
+        .wrapper.is-floating {
+            background-color: transparent;
+            transition: grid-template-rows .5s cubic-bezier(0.4, 0, 0.2, 1) .1s;
+        }
+            .wrapper.is-floating.is-open {
+                grid-template-rows: 1fr;
+            }
+
+    .option-list {
+        overflow: hidden;
+        margin: 0 3px 0 3px;
+        padding: 0;
+        list-style: none;
+    }
+
+        .option-list.on-top {
+            margin: 0 3px 0 3px;
+        }
+
+        .option-list > li {
+            display: flex;
+            border-bottom: 1px dashed lightgray;
+            font-size: 17px;
+            font-weight: 500;
+            color: darkcyan;
+            padding: 8px 0 8px 0;
+            background-color: transparent;
+            transition: all .2s ease-in-out;
+            justify-content: center;
+        }
+
+        .option-list.on-top > li {
+            border-bottom: 1px dashed cornflowerblue;
+            color: darkorchid;
+        }
+
+        .option-list > li:first-child {
+            margin-top: 5px;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+
+        .option-list.on-top > li:first-child {
+            border-top-left-radius: 7px;
+            border-top-right-radius: 7px;
+        }
+
+        .option-list > li:last-child {
+            border-bottom: 0;
+            margin-bottom: 3px;
+            border-bottom-left-radius: 17px;
+            border-bottom-right-radius: 17px;
+        }
+
+        .option-list.on-top > li:last-child {
+            border-bottom-left-radius: 7px;
+            border-bottom-right-radius: 7px;
+        }
+
+        .option-list > li > a {
+            text-decoration: none;
+            font-size: 17px;
+            font-weight: 500;
+            color: inherit;
+            transition: all .2s ease-in-out;
+        }
+
+        .option-list > li:hover {
+            background-color: rgba(128, 128, 128, 0.2);
+            color: darkmagenta;
+        }
+
+        .option-list.on-top > li:hover {
+            background-color: rgba(255, 255, 255, .4);
+        }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<div class="nav-field" style="padding-right: @(scrollbarWidth)px;">
+    <div id="nav-cont" style="@(isOnTop ? $"width: calc(100% - {GetUserBoxWidthProp}px);" : $"width: calc(263px + {GetNavItemsWidthProp}px)")" class="nav-container @(isOnTop ? "on-top" : "is-floating")">
+        <button class="navbar-brand @(isOnTop ? "on-top" : "is-floating")" @onclick="() => RedirectTo(Paths.Home)">
+            Wanderlust Explorers
         </button>
-        <div class="collapse navbar-collapse justify-content-between" id="navbarNav">
-            <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" href="">
-                        Tours
-                    </a>
-                </li>
-                <li class="nav-item">
+        
+        <ul class="@(isOnTop ? "on-top" : "is-floating")">
+            <li class="nav-item@(new string(CurrentPath.TakeWhile(c => c != '/').ToArray()) == "tours" ? " chosen" : "")" @onmouseover="() => ShowTourTab = true" @onmouseout="() => ShowTourTab = false">
+                <a class="nav-link" href="tours">
+                    Tours
+                </a>
+
+                <div class="tab-container@(ShowTourTab ? " is-open" : "")" style="width: 500px; left: 0; @(isOnTop ? " top: calc(100% + 7px)" : "")" @onmouseover="() => ShowTourTab = true" @onmouseout="() => ShowTourTab = false">
+                    <div class="tab@(ShowTourTab ? " is-open" : "")">
+                        <div class="tab-title" style="background-color: #444b00;" role="button" @onclick="() => RedirectTo(Paths.Home)">
+                            <div style="display: flex; padding: 5px 20px 5px 5px; flex-direction: column;">
+                                <span style="color: white; font-size: 18px; font-weight: 500;">View tours</span>
+                            </div>
+                            <img src="/icons/icons8-направо-белое-24.png" />
+                        </div>
+                        <div style="padding: 10px;">
+                            <span style="font-weight: 500; font-size: 14px;">Immerse yourself in exciting travels! Discover the most interesting tours from around the world. Explore unique places, enjoy local culture and create unforgettable memories. Get ready for an adventure with our tour offers!</span>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li class="nav-item" @onmouseover="() => ShowCountryTab = true" @onmouseout="() => ShowCountryTab = false">
+                <a class="nav-link">
+                    Countries
+                </a>
+
+                <div class="tab-container@(ShowCountryTab ? " is-open" : "")" style="left: 0; @(isOnTop ? " top: calc(100% + 7px)" : "")" @onmouseover="() => ShowCountryTab = true" @onmouseout="() => ShowCountryTab = false">
+                    <div class="tab@(ShowCountryTab ? " is-open" : "")">
+                        <div class="tab-title" style="background-color: #0564ff;">
+                            <div style="display: flex; padding: 5px 20px 5px 5px; flex-direction: column;">
+                                <span style="color: white; font-size: 18px; font-weight: 500;">Tours by country</span>
+                                <span style="color: white; font-size: 14px; font-weight: 500; padding-top: 5px;">If you want to visit a specific country, you can use this tab</span>
+                            </div>
+                        </div>
+                        <div style="padding: 10px;
+                        display: flex;
+                        width: 100%;
+                        max-width: 100%;
+                        height: fit-content;
+                        max-height: 40vh;
+                        overflow-y: scroll;
+                        scrollbar-width: none;
+                        justify-content: center;">
+                            <div class="country-groups">
+                                @foreach (var regionGroup in groupedCountries)
+                                {
+                                    <div class="region-div">
+                                        @regionGroup.Key
+                                        @foreach (var subRegionGroup in regionGroup.Value)
+                                        {
+                                            <div class="subregion-div">
+                                                @subRegionGroup.Key
+                                                @foreach (var country in subRegionGroup.Value)
+                                                {
+                                                    <div class="country-div">
+                                                        <a href="javascript:void(0)" @onclick="() => NavigateToCountry(country.CCA2)" style="margin: 0; text-decoration: none; color: inherit;">
+                                                            @country.Name
+                                                        </a>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li class="nav-item" @onmouseover="() => ShowAboutUsTab = true" @onmouseout="() => ShowAboutUsTab = false">
+                <a class="nav-link">
+                    About us
+                </a>
+
+                <div class="tab-container@(ShowAboutUsTab ? " is-open" : "")" style="@(isOnTop ? "right: 0; top: calc(100% + 7px)" : "left: 0;")" @onmouseover="() => ShowAboutUsTab = true" @onmouseout="() => ShowAboutUsTab = false">
+                    <div class="tab@(ShowAboutUsTab ? " is-open" : "")">
+                        <div class="tab-title" style="background-color: #511b17;">
+                            <div style="display: flex; padding: 5px 20px 5px 5px; flex-direction: column;">
+                                <span style="color: white; font-size: 18px; font-weight: 500;">About Wanderlust Explorers</span>
+                            </div>
+                        </div>
+                        <div style="padding: 10px;">
+                            <p style="font-weight: 500; font-size: 16px;"><b>Kind regards to Wanderlust Explorers!</b></p>
+                            <p style="font-weight: 500; font-size: 14px;">We are your trusted guide in the world of travel, helping agencies create unique itineraries and tourists find the perfect vacation. Our tour builder allows agencies to easily create a tour program by choosing the best hotels, modes of transportation, and activities. And for tourists, it is a convenient way to book a dream trip by choosing from a wide range of available offers.</p>
+                            <p style="font-weight: 500; font-size: 14px;">With our system, you can be sure that your travels will be memorable forever. We automate the process of booking hotels and activities so that you can enjoy every moment of your trip without wasting time on organizational issues.</p>
+                            <p style="font-weight: 500; font-size: 14px;">Join our community and learn more about the world of tourism with us!</p>
+                            <p style="margin-bottom: 0; font-weight: 500; font-size: 14px;">To view development details, go to the <b>Development</b> tab</p>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li class="nav-item" @onmouseover="() => ShowDevelopmentTab = true" @onmouseout="() => ShowDevelopmentTab = false">
+                <a class="nav-link" href="https://github.com/R-Kostenko/Travel_Web_App_Prototype" target="_blank">
+                    Development
+                </a>
+
+                <div class="tab-container@(ShowDevelopmentTab ? " is-open" : "")" style="@(isOnTop ? "right: 0; top: calc(100% + 7px)" : "left: 0;")" @onmouseover="() => ShowDevelopmentTab = true" @onmouseout="() => ShowDevelopmentTab = false">
+                    <div class="tab@(ShowDevelopmentTab ? " is-open" : "")">
+                        <div class="tab-title" style="background-color: #3fb784;" role="button" @onclick="async () => await RedirectToGitHub()">
+                            <div style="display: flex; padding: 5px 20px 5px 5px; flex-direction: column;">
+                                <span style="color: black; font-size: 18px; font-weight: 500;">About the project</span>
+                            </div>
+                            <img src="/icons/icons8-направо-черное-24.png" />
+                        </div>
+                        <div style="padding: 10px;">
+                            <p style="font-weight: 500; font-size: 14px;">
+                                <b style="font-size: 16px;">Wanderlust Explorers</b> is a pet project created to gain experience in various technologies as well as a diploma project.
+                            </p>
+                            <p style="font-weight: 500; font-size: 14px; padding-top: 5px;">
+                                In the course of development, experience is gained in:
+                                <ul>
+                                    <li style="font-size: 15px;">ASP.NET (Blazor Server Framework)</li>
+                                    <li style="font-size: 15px;">C#</li>
+                                    <li style="font-size: 15px;">HTML, CSS, JavaScript</li>
+                                    <li style="font-size: 15px;">SQL Server (using ORM Entity Framework)</li>
+                                    <li style="font-size: 15px;">SignalR (development of a live support chat)</li>
+                                    <li style="font-size: 15px;">SMTP (sending email notifications to users)</li>
+                                    <li style="font-size: 15px;">Hangfire (to schedule automatic bookings of tour activities and send emails)</li>
+                                </ul>
+                            </p>
+                            <div style="display: inline-flex;">
+                                <span style="margin-right: 20px; font-weight: 500; font-size: 14px; padding-top: 5px;">Project on GitHub: <a style="margin: 0; text-decoration: none;" href="https://github.com/R-Kostenko" target="_blank">R-Kostenko</a><a style="margin: 0; text-decoration: none;" href="https://github.com/R-Kostenko/Travel_Web_App_Prototype" target="_blank">/Travel_Web_App</a></span>
+                                <span style="font-weight: 500; font-size: 14px; padding-top: 5px;">Work email: <a style="margin: 0; text-decoration: none;" href="mailto:r.kostenko.w@gmail.com">r.kostenko.w@gmail.com</a></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            @if (IsAuth && user.Role.RoleName == "Manager")
+            {
+                <li class="nav-item@(CurrentPath == "create-tour" ? " chosen" : "")" @onmouseover="() => ShowCreateTourTab = true" @onmouseout="() => ShowCreateTourTab = false">
                     <a class="nav-link" href="create-tour">
-                        Add Tour
+                        Create a tour
                     </a>
+
+                    <div class="tab-container@(ShowCreateTourTab ? " is-open" : "")" style="@(isOnTop ? "right: 0; top: calc(100% + 7px)" : "left: 0;")" @onmouseover="() => ShowCreateTourTab = true" @onmouseout="() => ShowCreateTourTab = false">
+                        <div class="tab@(ShowCreateTourTab ? " is-open" : "")">
+                            <div class="tab-title" style="background-color: rgb(189 32 62);" role="button" @onclick="() => RedirectTo(Paths.CreateTour)">
+                                <div style="display: flex; padding: 5px 20px 5px 5px; flex-direction: column;">
+                                    <span style="color: white; font-size: 18px; font-weight: 500;">Create a tour</span>
+                                </div>
+                                <img src="/icons/icons8-направо-белое-24.png" />
+                            </div>
+                            <div style="padding: 10px;">
+                                <span style="font-weight: 500; font-size: 15px;">Here, managers of your travel agency will be able to use the tour builder to conveniently search for activities and hotels</span>
+                            </div>
+                        </div>
+                    </div>
                 </li>
-            </ul>
-            <div class="text-end">
+            }
+        </ul>
+    </div>
+    <div id="user-box" class="user-box @(isOnTop ? "on-top" : "is-floating")">
+        <div style="display: inline-flex; align-items: center; width: 100%; padding: 0; margin: 0;">
+            @if (!IsAuth)
+            {
+                <select id="country" class="form-select" @bind="selectedCountryName" style="width: fit-content;
+                padding: 3px 15px;
+                margin: 0 3px 0 5px;
+                border-radius: 20px;
+                @(selectedCountry != null ? $" background-image: url('{selectedCountry.FlagURL}');" : "") 
+                background-size: cover;
+                background-repeat: no-repeat;
+                background-position: center;
+                filter: brightness(0.9);
+                color: black;
+                font-weight: 500;
+                border: 1px solid black;
+                cursor: pointer;">
+                    @foreach (var country in countries)
+                    {
+                        <option value="@country.Name">@country.Name</option>
+                    }
+                </select>
+            }
+
+            <div class="user-btn@(IsAuth ? " is-logged-in" : "")" role="button" @onmouseover="() => ShowOptionList = true" @onmouseout= "() => ShowOptionList = false" @onclick="() => {if (!IsAuth) ShowAuth();}">
                 @if (IsAuth)
                 {
-                    <h5>Hi @responceMessage</h5>
+                    if (user.Role.RoleName == "Admin")
+                    {
+                        <img src="icons/icons8-настройки-администратора-32.png" style="margin-right: 10px;">
+                    }
+                    else if (user.Role.RoleName == "Manager")
+                    {
+                        <img src="icons/icons8-manager-32.png" style="margin-right: 10px;">
+                    }
+                    else
+                    {
+                        <img src="icons/icons8-пользователь-32.png" style="margin-right: 10px;">
+                    }
+                    <h5 style="max-width: 100px; font-size: 1.25rem; font-weight: 700; color: inherit; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        @user.FirstName
+                    </h5>
                 }
-                else{
-                    <a href="" class="nav-link text-white" @onclick="ShowLogin">Log in</a>
+                else
+                {
+                    <a style="width:max-content; font-size: 1.25rem; font-weight: 700; color: inherit; margin: 0;">Log in</a>
                 }
             </div>
+
+            @if (IsAuth)
+            {
+                <button class="secondary-btn" style="width:max-content; margin-right: 3px;" @onclick="UserStateService.LogOut">Log out</button>
+            }
         </div>
+        
+        @if (IsAuth)
+        {
+            <div class="wrapper @((isOnTop ? "on-top" : "is-floating") + (ShowOptionList ? " is-open" : ""))"
+             @onmouseover="() => ShowOptionList = true" @onmouseout="() => ShowOptionList = false">
+                <ul class="option-list@(isOnTop ? " on-top" : "")">
+                    <li role="button" @onclick="() => RedirectTo(Paths.Profile)">Profile</li>
+                    <li role="button" @onclick="() => RedirectTo(Paths.OrderedTours)">Booked tours</li>
+                    @if (user.Role.RoleName == "Manager")
+                    {
+                        <li role="button" @onclick="() => RedirectTo(Paths.ToursManagement)">Tour management</li>
+                    }
+                    @if (user.Role.RoleName == "Admin")
+                    {
+                        <li role="button" @onclick="() => RedirectTo(Paths.UserAdministration)">User administration</li>
+                    }
+                </ul>
+            </div>
+        }
     </div>
 </div>
-</CascadingAuthenticationState>
-
-@if (showLogin)
-{
-    <div class="overlay">
-        <div class="logreg-container">
-            <LoginComponent OnExit="HideLogin" OnRegistration="() => { HideLogin(); ShowRegistartion(); }" />
-            @*<button class="btn btn-secondary mt-2" @onclick="HideLogin">Close</button>*@
-        </div>
-    </div>
-}
-
-@if (showRegistration)
-{
-    <div class="overlay">
-        <div class="logreg-container">
-            <RegisterComponent OnExit="HideRegistartion" />
-            <button class="btn btn-secondary mt-2" @onclick="HideRegistartion">Cancel</button>
-        </div>
-    </div>
-}
 
 @code {
+    private string responseMessage { get; set; } = string.Empty;
     private bool IsAuth => user != null;
-    private bool collapseNavMenu = true;
-    private string responceMessage = string.Empty;
     private User? user = null;
-
-    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
-
-    private void ToggleNavMenu()
+    private string selectedCountryName
     {
-        collapseNavMenu = !collapseNavMenu;
+        get
+        {
+            if (selectedCountry != null)
+                return selectedCountry.Name;
+            else
+            {
+                selectedCountry = UserStateService.UserCountry;
+                return selectedCountry.Name;
+            }
+        }
+        set
+        {
+            selectedCountry = countries.FirstOrDefault(c => c.Name == value);
+            UserStateService.CountryUpdate(selectedCountry);
+        }
+    }
+    private Country? selectedCountry;
+    private List<Country> countries = new();
+    private Dictionary<string, Dictionary<string, List<Country>>> groupedCountries = new();
+    private string CurrentPath => NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+    private bool isOnTop { get; set; } = true;
+    private int scrollbarWidth { get; set; } = 0;
+    private bool afterRender = false;
+
+    private int GetUserBoxWidthProp
+    {
+        get
+        {
+            if (afterRender)
+                GetUserBoxWidth();
+            return boxWidth;
+        }
+    }
+    private int boxWidth = 0;
+    private async void GetUserBoxWidth() => boxWidth = afterRender ? await JSRuntime.InvokeAsync<int>("getElementWidth", "user-box") : 0;
+
+    private int GetNavItemsWidthProp
+    {
+        get
+        {
+            if (afterRender)
+                GetNavItemsWidth();
+            return navItemsWidth;
+        }
+    }
+    private int navItemsWidth = 0;
+    private async void GetNavItemsWidth() => navItemsWidth = afterRender ? await JSRuntime.InvokeAsync<int>("getNavItemsWidth") : 0;
+
+    private bool ShowTourTab { get; set; } = false;
+    private bool ShowCountryTab { get; set; } = false;
+    private bool ShowAboutUsTab { get; set; } = false;
+    private bool ShowDevelopmentTab { get; set; } = false;
+    private bool ShowCreateTourTab { get; set; } = false;
+    private bool ShowOptionList { get; set; } = false;
+
+    private void NavigateToCountry(string countryCCA2) => NavigationManager.NavigateTo($"tours/with-county={countryCCA2}", true);
+
+    private void RedirectTo(Paths path) => NavigationManager.NavigateTo(path.GetEnumMemberValue());
+    private async Task RedirectToGitHub()
+    {
+        await JSRuntime.InvokeVoidAsync("open", "https://github.com/R-Kostenko/Travel_Web_App_Prototype", "_blank");
     }
 
-    protected override Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync()
     {
         UserStateService.OnUserUpdate += GetUser;
+        UserStateService.OnAuthorizationRequest += ShowAuth;
         user = UserStateService.User;
-        return base.OnInitializedAsync();
+        selectedCountry = UserStateService.UserCountry;
+
+        isOnTop = ScrollService.ScrollData.scrollPosition < 2;
+        scrollbarWidth = ScrollService.ScrollData.scrollbarWidth;
+        ScrollService.OnScroll += OnScroll;
+
+        try
+        {
+            HttpResponseMessage countriesResponse = await HttpClient.GetAsync(NavigationManager.BaseUri + "location/countries-list");
+
+            List<Country> receivedCountries = new();
+            if (countriesResponse.IsSuccessStatusCode)
+                receivedCountries = await countriesResponse.Content.ReadFromJsonAsync<List<Country>>() ?? new();
+
+            countries = receivedCountries;
+
+            if (receivedCountries.Count > 0)
+                groupedCountries = receivedCountries
+                    .GroupBy(c => c.Region)
+                    .ToDictionary(g => g.Key, g => g.ToList()
+                        .GroupBy(gr => gr.Subregion)
+                        .ToDictionary(gs => gs.Key, gs => gs.ToList().OrderBy(c => c.Name).ToList()));
+        }
+        catch (Exception ex)
+        {
+            string message = ex.Message;
+        }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        afterRender = true;
+        if (firstRender)
+        {
+            boxWidth = afterRender ? await JSRuntime.InvokeAsync<int>("getElementWidth", "user-box") : 0;
+            navItemsWidth = afterRender ? await JSRuntime.InvokeAsync<int>("getNavItemsWidth") : 0;
+        }
     }
 
-    private bool showLogin = false;
-
-    private void ShowLogin()
+    private void ShowAuth()
     {
-        showLogin = true;
-    }
-
-    private void HideLogin()
-    {
-        showLogin = false;
-    }
-
-    private bool showRegistration = false;
-
-    private void ShowRegistartion()
-    {
-        showRegistration = true;
-    }
-
-    private void HideRegistartion()
-    {
-        showRegistration = false;
+        var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
     }
 
     private async Task GetUser(User? regUser)
     {
         user = regUser;
-
-        if (user != null)
-        {
-            responceMessage = $"Name: {user.FirstName}, Email: {user.Email}, Role: {user.Role.RoleName}";
-        }
-        else
-        {
-            responceMessage = $"Error getting user object.";
-        }
-
+        boxWidth = afterRender ? await JSRuntime.InvokeAsync<int>("getElementWidth", "user-box") : 0;
+        navItemsWidth = afterRender ? await JSRuntime.InvokeAsync<int>("getNavItemsWidth") : 0;
         await InvokeAsync(StateHasChanged);
+    }
 
-        //HttpResponseMessage responce = await HttpClient.GetAsync(NavigationManager.BaseUri + "account/current-user");
+    private async void OnScroll(ScrollData scroll)
+    {
+        isOnTop = scroll.scrollPosition < 2;
+        scrollbarWidth = scroll.scrollbarWidth;
+        await InvokeAsync(StateHasChanged);
+    }
 
-        //if (responce.IsSuccessStatusCode)
-        //{
-        //IsAuth = true;
-        //user = await responce.Content.ReadFromJsonAsync<User>();
-        //if (user != null)
-        //{
-        //    responceMessage = $"Name: {user.FirstName}, Email: {user.Email}, Role: {user.Role.RoleName}";                
-        //}
-        //else
-        //{
-        //    responceMessage = $"Error getting user object.";
-        //}
-        //StateHasChanged();
-        //}
-        //else if (responce.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-        //{
-        //    IsAuth = false;
-        //    responceMessage = "Authorization fault, Unauthorized exception.";
-        //    StateHasChanged();
-        //}
-        //else
-        //{
-        //    IsAuth = false;
-        //    responceMessage = await responce.Content.ReadAsStringAsync();
-        //    StateHasChanged();
-        //}
+    private enum Paths
+    {
+        [EnumMember(Value = "")]
+        Home,
+        [EnumMember(Value = "create-tour")]
+        CreateTour,
+        [EnumMember(Value = "profile")]
+        Profile,
+        [EnumMember(Value = "ordered-tours")]
+        OrderedTours,
+        [EnumMember(Value = "tours-management")]
+        ToursManagement,
+        [EnumMember(Value = "user-administration")]
+        UserAdministration
     }
 }

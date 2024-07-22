@@ -1,0 +1,162 @@
+﻿@page "/tours-management"
+@using Microsoft.EntityFrameworkCore;
+@using Models
+@using Services
+@using Services.Mail
+@using System.Net
+@using System.Net.Http.Json
+@using Travel_App_Web.Data;
+@inject HttpClient HttpClient
+@inject NavigationManager NavigationManager
+@inject UserStateService UserStateService
+@inject DBContext DBContext
+
+<style>
+    .link {
+        color: blueviolet;
+        text-decoration: underline;
+        cursor: pointer;
+        transition: color 0.3s ease;
+    }
+
+        .link:hover {
+            color: darkblue;
+        }
+
+    .tour-container {
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid lightgrey;
+        display: inline-flex;
+        justify-content: space-between;
+        text-align: center;
+        margin-bottom: 10px;
+        align-items: center;
+    }
+</style>
+
+@if (!string.IsNullOrEmpty(responseMessage))
+{
+    <Notification ResponseMessage="@responseMessage" OnClose="() => responseMessage = string.Empty" />
+}
+
+<div style="width: 100%; display: flex; justify-content: center; text-align: center;">
+    <div class="logreg-container" style="z-index: 1; border-radius: 20px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);">
+        <div class="card">
+            <div class="card-body" style="width: fit-content; padding: 30px;">
+                @if (agencyTours.Count < 1)
+                {
+                    <h4 class="mb-4" style="width: 100%; text-align: center;">Your agency does not have any tours created yet</h4>
+                }
+                else
+                {
+                    <h4 class="mb-4" style="width: 100%; text-align: center; margin-bottom: 20px;">
+                        @(agency.Name). Tour management
+                    </h4>
+
+                    @foreach (var tour in agencyTours)
+                    {
+                        long tourId = tour.TourId;
+                        int participantsNumber = tour.Participants.Sum(pu => pu.OtherUsers.Count + 1);
+
+                        <div class="tour-container">
+                            <div style="border-radius: 10px; overflow: hidden; width: 35%; margin-right: 10px; align-items: center;
+                            justify-content: center;
+                            display: inline-flex;">
+                                <img src="@tour.ImagePath" style="width: 100%; height: fit-content;" />
+                            </div>
+
+                            <div style="margin-right: 10px">
+                                <h5>@tour.Title</h5>
+                                <h6><a class="link" href="@($"tour-view/{tour.TourId}")">View the tour</a></h6>
+                                <h6>@tour.StartDate.Value.ToShortDateString() - @tour.EndDate.Value.ToShortDateString()</h6>
+                            </div>
+
+                            <div>
+                                <h5>@participantsNumber/@tour.ParticipantsMaxNumber</h5>
+                                <h6 style="margin-bottom: 10px;">participants</h6>
+                                <button class="secondary-btn" @onclick="async() => await DeleteAsync(tourId)">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+@code {
+    TourAgency agency { get; set; }
+    List<Tour> agencyTours { get; set; } = new();
+    string responseMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserStateService.OnAuthorizationDeny += () => NavigationManager.NavigateTo("");
+        UserStateService.OnUserUpdate += async (user) =>
+        {
+            await Task.Run(() =>
+            {
+                if (user is null)
+                    NavigationManager.NavigateTo("");
+            });
+        };
+
+        if (UserStateService.User is null)
+        {
+            var currentPath = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+            NavigationManager.NavigateTo($"login/{currentPath.Replace('/', '_')}");
+        }
+        else if (UserStateService.User.Role.RoleName != "Manager")
+            NavigationManager.NavigateTo("");
+
+        await GetTours();
+    }
+
+    private async Task DeleteAsync(long tourId)
+    {
+        try
+        {
+            var response = await HttpClient.GetAsync(NavigationManager.BaseUri + $"tour/delete/{tourId}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                responseMessage = "<h5 style=\"color: green\">You have successfully deleted a tour<h5>";
+                await GetTours();
+            }
+            else
+            {
+                responseMessage = await response.Content.ReadAsStringAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            responseMessage = ex.Message;
+        }
+    }
+
+    private async Task GetTours()
+    {
+        agency = await DBContext.Agencies.FirstOrDefaultAsync(a => a.Managers.Any(m => m.Email == UserStateService.User.Email)) ?? new();
+
+        agencyTours = await DBContext.Tours.Where(t => t.Agency.AgencyId == agency.AgencyId).ToListAsync();
+
+        foreach (var tour in agencyTours)
+        {
+            await DBContext.Entry(tour)
+                    .Collection(t => t.Participants)
+                    .LoadAsync();
+
+            foreach (var participant in tour.Participants)
+            {
+                await DBContext.Entry(participant)
+                    .Collection(p => p.OtherUsers)
+                    .LoadAsync();
+            }
+        }
+    }
+}

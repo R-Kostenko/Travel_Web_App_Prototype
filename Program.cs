@@ -30,7 +30,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
                 });
 //builder.Services.AddAntiforgery(options =>
 //{
-//    options.HeaderName = "X-CSRF-TOKEN"; // Имя заголовка для передачи токена на клиенте
+//    options.HeaderName = "X-CSRF-TOKEN";
 //});
 
 builder.Services.AddSignalR();

@@ -21,6 +21,7 @@ I am creating a software system for a travel agency (it will be part of my under
 - Tour builder (no selection of existing hotels and buses yet)
 - Inserting and storing tours in the database
 - Tour preview
+- User support in the form of a chat with the administrator (SignalR)
 
 ## It is planned to implement:
 - implement the full functionality of the tour designer
@@ -28,7 +29,6 @@ I am creating a software system for a travel agency (it will be part of my under
   - add the ability to get data on hotels of different classes in the visited cities (using third-party API service)
 - add full-fledged tour search (user location will be used)
 - implement the ability to book a place in a tour (automatic booking of places in hotels using third-party API services)
-- implement user support in the form of a chat with the administrator (SignalR)
 - add a system for sending emails from the site mail to confirm user actions and regular order-related notifications
 - implement a system for regular notifications to users (using the previous paragraph) as well as for regular updates of exchange rates and tour data (using Quartz.NET or Hangfire)
 - implement a multicultural interface

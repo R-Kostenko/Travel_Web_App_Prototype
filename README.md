@@ -1,34 +1,32 @@
-# Travel_App_Web
+# Web-based information and reference system for travel agencies
 This is a logical continuation of the previous pet-project in which I get trained in new technologies and gain experience in developing ASP.NET projects.
 
-As you might have noticed in the repository name, this is a prototype of my project, which is far from complete. I didn't spend a lot of time on the design of the site, but I will do it closer to the logical completion of the project.
+At this point, the system is capable of performing all the functions assigned to it. Of course it needs in-depth testing with debugging, but this may take too much time, which I can't afford at the moment. The development is planned to continue for mastering new technologies (in the form of a pet-project).
+
+The system is published on Azure service (with SQL Server database migration to AzureSQL) under the address https://wanderlust-explorers.azurewebsites.net. I will be glad if you show interest in it).
 
 ## Short description
-I am creating a software system for a travel agency (it will be part of my undergraduate thesis project). This system is more oriented on comfort of work of the administrator of the tour company, namely convenience and responsiveness when creating a new tour in the automated tour designer (this convenience will be provided by third-party API services to facilitate the organization of the tour), as well as the ability of the system to independently book hotel rooms and buses for the entire tour. For the convenience of users: search for tours, communication with the administration (using the built-in chat).
+I am creating a software system for a travel agency (it will be part of my undergraduate thesis project). This system is more oriented on comfort of work of the manager of the tour agency, namely convenience and responsiveness when creating a new tour in the automated tour designer with the ability to search for hotels, transportation, points of interest and local activities (this convenience will be provided by third-party API services to facilitate the organization of the tour), as well as easy booking. For the convenience of tourists: search for tours, a simple process of ordering a tour as well as the ability to get support admin (using the built-in chat).
 
 ## Technologies
-- ASP.NET (Blazor)
+- ASP.NET (Blazor Server)
 - C#
-- HTML, CSS
-- Entity Framework
-- MS SQL Server
-- API controllers external API services
-- SignalR
-- Quartz.NET or Hangfire for scheduling automated tasks
+- HTML, CSS, JavaScript
+- MS SQL Server (migration to AzureSQL) using ORM Entity Framework
+- Azure
+- API controllers, use of external API services
+- SignalR to create a real-time support chat
+- Hangfire for scheduling automated tasks
 
 ## Implemented functionality:
 - Registration, authorization and authentication
-- Tour builder (no selection of existing hotels and buses yet)
-- Inserting and storing tours in the database
-- Tour preview
-- User support in the form of a chat with the administrator (SignalR)
+- Full-featured Tour Builder with the ability to select hotels, transportation, points of interest and other local activities (using Amadeus API, Google Maps API and currency conversion service).
+- Storing tours in the database and manipulating them (e.g. automatic deletion of tours after their completion)
+- Possibility to search for tours by visited countries or by using the search bar
+- Possibility to view the selected tour together with further bookings (including hotel room reservations)
+- Service for sending notifications to users' emails (e.g. notifying the user about the upcoming start of a tour or notifying the tour manager with links to booking activities and transportation within the system) (using FluentEmail)
+- Automatic scheduling of tasks such as sending notifications, exchange rate updates and manipulation of stored tours (using HangFire)
+- User support in the form of a chat with the administrator (using SignalR)
 
 ## It is planned to implement:
-- implement the full functionality of the tour designer
-  - add the ability to book a bus for a long tour (using a third-party API service)
-  - add the ability to get data on hotels of different classes in the visited cities (using third-party API service)
-- add full-fledged tour search (user location will be used)
-- implement the ability to book a place in a tour (automatic booking of places in hotels using third-party API services)
-- add a system for sending emails from the site mail to confirm user actions and regular order-related notifications
-- implement a system for regular notifications to users (using the previous paragraph) as well as for regular updates of exchange rates and tour data (using Quartz.NET or Hangfire)
-- implement a multicultural interface
+- Multicultural interface
